@@ -17,6 +17,7 @@ FIXED_LOCATION_LABEL = "경기 연천군 장남면 장백로278번길 4"
 DEFAULT_CONTACT = "jin0424@hanmail.net"
 DEFAULT_LATITUDE = 37.9851297299633
 DEFAULT_LONGITUDE = 126.886246142811
+KMA_BULLETIN_STN_ID = os.getenv("KMA_BULLETIN_STN_ID", "109")
 
 
 def default_user_agent() -> str:
@@ -79,6 +80,10 @@ def fetch_json(url: str, headers: dict[str, str] | None = None) -> Any:
         raise ApiError(str(exc.reason)) from exc
     except TimeoutError as exc:
         raise ApiError("request timed out") from exc
+
+
+def data_go_kr_service_key() -> str | None:
+    return os.getenv("DATA_GO_KR_SERVICE_KEY") or os.getenv("SERVICE_KEY")
 
 
 def format_number(value: float | None) -> str | None:
@@ -255,6 +260,21 @@ def sample_every_n_rows(rows: list[dict[str, Any]], target_count: int = TIMELINE
     return rows[::step][:target_count]
 
 
+def summarize_korean_bulletin(value: str | None, limit: int = 36) -> str | None:
+    if not value:
+        return None
+    normalized = " ".join(value.split())
+    for separator in [".", "다.", "\n"]:
+        if separator in normalized:
+            candidate = normalized.split(separator)[0].strip()
+            if candidate:
+                normalized = candidate
+                break
+    if len(normalized) <= limit:
+        return normalized
+    return normalized[: limit - 1].rstrip() + "…"
+
+
 def open_meteo_forecast(location: Location) -> dict[str, Any]:
     query = urllib.parse.urlencode(
         {
@@ -413,11 +433,60 @@ def wttr_forecast(location: Location) -> dict[str, Any]:
     }
 
 
-PROVIDERS = [
-    ("Open-Meteo", open_meteo_forecast),
-    ("MET Norway", met_norway_forecast),
-    ("wttr.in", wttr_forecast),
-]
+def kma_bulletin_forecast(location: Location) -> dict[str, Any]:
+    service_key = data_go_kr_service_key()
+    if not service_key:
+        raise ApiError("DATA_GO_KR_SERVICE_KEY is not configured")
+
+    query = urllib.parse.urlencode(
+        {
+            "serviceKey": service_key,
+            "pageNo": 1,
+            "numOfRows": 10,
+            "dataType": "JSON",
+            "stnId": KMA_BULLETIN_STN_ID,
+        }
+    )
+    payload = fetch_json(f"https://apis.data.go.kr/1360000/VilageFcstMsgService/getWthrSituation?{query}")
+    body = payload.get("response", {}).get("body", {})
+    items = body.get("items", {}).get("item", [])
+    if not items:
+        raise ApiError("KMA bulletin returned no items")
+
+    entry = items[0]
+    overview = entry.get("wfSv1") or ""
+    notice = entry.get("wn") or ""
+    reserve_notice = entry.get("wr") or ""
+    summary = summarize_korean_bulletin(overview) or summarize_korean_bulletin(notice) or "기상 통보문"
+    if notice and notice != "없음":
+        summary = f"{summary} / 특보 {summarize_korean_bulletin(notice, 18)}"
+
+    return {
+        "provider": "기상청 통보문",
+        "source_url": "https://www.data.go.kr/data/15058629/openapi.do",
+        "current_temp_c": None,
+        "feels_like_c": None,
+        "condition": summary,
+        "next_6h_precip_probability": None,
+        "next_24h_low_c": None,
+        "next_24h_high_c": None,
+        "forecast_time": entry.get("tmFc"),
+        "timeline": [],
+        "bulletin_overview": overview or None,
+        "bulletin_notice": notice or None,
+        "bulletin_preliminary_notice": reserve_notice or None,
+    }
+
+
+def active_providers() -> list[tuple[str, Any]]:
+    providers = [
+        ("Open-Meteo", open_meteo_forecast),
+        ("MET Norway", met_norway_forecast),
+        ("wttr.in", wttr_forecast),
+    ]
+    if data_go_kr_service_key():
+        providers.append(("기상청 통보문", kma_bulletin_forecast))
+    return providers
 
 
 def build_consensus(providers: list[dict[str, Any]]) -> dict[str, Any]:
@@ -463,7 +532,7 @@ def build_consensus(providers: list[dict[str, Any]]) -> dict[str, Any]:
 def collect_fixed_location_forecasts() -> dict[str, Any]:
     location = configured_location()
     providers = []
-    for provider_name, provider in PROVIDERS:
+    for provider_name, provider in active_providers():
         try:
             providers.append(provider(location))
         except Exception as exc:

@@ -64,6 +64,10 @@ class HelpersTests(unittest.TestCase):
         self.assertEqual(app.translate_met_symbol("partlycloudy_day"), "구름 조금")
         self.assertEqual(app.translate_met_symbol("rainshowers_day"), "소나기")
 
+    def test_summarize_korean_bulletin_truncates_cleanly(self) -> None:
+        text = "오늘은 대체로 흐리겠고 늦은 오후부터 비가 내리겠습니다. 내일은 맑겠습니다."
+        self.assertEqual(app.summarize_korean_bulletin(text, limit=20), "오늘은 대체로 흐리겠고 늦은 오후부…")
+
 
 class ConsensusTests(unittest.TestCase):
     def test_build_consensus_aggregates_summary_and_timeline(self) -> None:

@@ -27,12 +27,14 @@ Vercel 환경변수는 선택 사항입니다. 기본값이 코드에 들어 있
 - `WEATHERCHECK_CONTACT`
 - `WEATHERCHECK_LATITUDE`
 - `WEATHERCHECK_LONGITUDE`
+- `DATA_GO_KR_SERVICE_KEY`
 
 ## Current MVP
 
 - 고정 주소만 표시
 - 고정 좌표 기준 조회
 - Open-Meteo, MET Norway, wttr.in 비교
+- `DATA_GO_KR_SERVICE_KEY`가 있으면 기상청 동네예보 통보문 source 추가
 - 현재 기온, 체감 기온, 상태, 6시간 강수 확률, 24시간 최저/최고 비교
 - 3시간 간격 24시간 타임라인 비교
 - 소스 간 편차 요약
