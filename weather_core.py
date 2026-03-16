@@ -357,6 +357,15 @@ def kma_condition_text(sky: str | None, pty: str | None) -> str | None:
     return kma_sky_text(sky)
 
 
+def wind_direction_text(degrees: str | float | None) -> str | None:
+    value = coerce_float(degrees)
+    if value is None:
+        return None
+    directions = ["북", "북동", "동", "남동", "남", "남서", "서", "북서"]
+    index = int((value + 22.5) // 45) % 8
+    return directions[index]
+
+
 def latest_kma_mid_base_datetime(now: datetime | None = None) -> str:
     current = now.astimezone(KST) if now else datetime.now(KST)
     if current.hour >= 18:
@@ -616,11 +625,12 @@ def kma_short_forecast(location: Location) -> dict[str, Any]:
         ),
         "next_24h_low_c": format_number(min(min_candidates)) if min_candidates else None,
         "next_24h_high_c": format_number(max(max_candidates)) if max_candidates else None,
-        "forecast_time": f"{base_date}T{base_time[:2]}:{base_time[2:]}:00+09:00",
+        "forecast_time": f"{base_date[:4]}-{base_date[4:6]}-{base_date[6:8]}T{base_time[:2]}:{base_time[2:]}:00+09:00",
         "time_label": "발표 시각",
         "timeline": sample_every_n_rows(timeline_rows),
         "humidity": first_bucket.get("REH"),
         "wind_speed_ms": first_bucket.get("WSD"),
+        "wind_direction": wind_direction_text(first_bucket.get("VEC")),
     }
 
 
@@ -684,6 +694,9 @@ def kma_mid_forecast() -> dict[str, Any]:
         days.append(
             {
                 "day_offset": day,
+                "target_date": (
+                    datetime.strptime(tm_fc[:8], "%Y%m%d").replace(tzinfo=KST) + timedelta(days=day)
+                ).date().isoformat(),
                 "am_condition": translate_condition_text(am_text) if am_text else None,
                 "pm_condition": translate_condition_text(pm_text) if pm_text else None,
                 "low_c": format_number(coerce_float(low)),

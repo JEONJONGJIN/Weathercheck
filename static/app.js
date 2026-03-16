@@ -26,7 +26,10 @@ function formatDateTime(value) {
     return "-";
   }
 
-  const date = new Date(value);
+  const normalized = typeof value === "string" && /^\d{8}T\d{2}:\d{2}:\d{2}/.test(value)
+    ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}${value.slice(8)}`
+    : value;
+  const date = new Date(normalized);
   if (Number.isNaN(date.getTime())) {
     return value;
   }
@@ -36,6 +39,21 @@ function formatDateTime(value) {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+  }).format(date);
+}
+
+function formatMonthDay(value) {
+  if (!value) {
+    return "-";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return new Intl.DateTimeFormat("ko-KR", {
+    month: "numeric",
+    day: "numeric",
+    weekday: "short",
   }).format(date);
 }
 
@@ -67,11 +85,13 @@ function renderProvider(provider) {
       <td>${formatCell(provider.feels_like_c, "°C")}</td>
       <td>
         ${formatCell(provider.condition)}
-        ${provider.humidity || provider.wind_speed_ms ? `
+        ${provider.humidity || provider.wind_speed_ms || provider.wind_direction ? `
           <div class="provider-subline">
             ${provider.humidity ? `습도 ${provider.humidity}%` : ""}
-            ${provider.humidity && provider.wind_speed_ms ? " / " : ""}
+            ${provider.humidity && (provider.wind_speed_ms || provider.wind_direction) ? " / " : ""}
             ${provider.wind_speed_ms ? `풍속 ${provider.wind_speed_ms}m/s` : ""}
+            ${provider.wind_speed_ms && provider.wind_direction ? " / " : ""}
+            ${provider.wind_direction ? `풍향 ${provider.wind_direction}` : ""}
           </div>
         ` : ""}
       </td>
@@ -95,7 +115,7 @@ function renderMidForecast(midForecast) {
   midForecastGrid.innerHTML = midForecast.days
     .map((day) => `
       <article class="mid-card">
-        <p class="mid-day">+${day.day_offset}일</p>
+        <p class="mid-day">${formatMonthDay(day.target_date)}</p>
         <p class="mid-condition">오전 ${formatCell(day.am_condition)}</p>
         <p class="mid-condition">오후 ${formatCell(day.pm_condition)}</p>
         <p class="mid-temp">${formatCell(day.low_c, "°C")} / ${formatCell(day.high_c, "°C")}</p>

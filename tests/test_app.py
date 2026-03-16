@@ -78,6 +78,10 @@ class HelpersTests(unittest.TestCase):
         self.assertEqual(len(value), 12)
         self.assertIn(value[8:10], {"06", "18"})
 
+    def test_wind_direction_text_maps_degrees_to_compass(self) -> None:
+        self.assertEqual(app.wind_direction_text("0"), "북")
+        self.assertEqual(app.wind_direction_text("90"), "동")
+
 
 class ConsensusTests(unittest.TestCase):
     def test_build_consensus_aggregates_summary_and_timeline(self) -> None:
