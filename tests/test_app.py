@@ -31,8 +31,9 @@ class FixedLocationTests(unittest.TestCase):
         try:
             os.environ.pop("WEATHERCHECK_LATITUDE", None)
             os.environ.pop("WEATHERCHECK_LONGITUDE", None)
-            with self.assertRaises(app.ApiError):
-                app.configured_location()
+            location = app.configured_location()
+            self.assertEqual(location.latitude, app.DEFAULT_LATITUDE)
+            self.assertEqual(location.longitude, app.DEFAULT_LONGITUDE)
         finally:
             if original_lat is not None:
                 os.environ["WEATHERCHECK_LATITUDE"] = original_lat

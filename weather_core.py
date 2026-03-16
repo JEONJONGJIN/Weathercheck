@@ -14,10 +14,13 @@ from typing import Any
 REQUEST_TIMEOUT_SECONDS = 12
 TIMELINE_POINT_COUNT = 8
 FIXED_LOCATION_LABEL = "경기 연천군 장남면 장백로278번길 4"
+DEFAULT_CONTACT = "jin0424@hanmail.net"
+DEFAULT_LATITUDE = 37.9851297299633
+DEFAULT_LONGITUDE = 126.886246142811
 
 
 def default_user_agent() -> str:
-    contact = os.getenv("WEATHERCHECK_CONTACT", "set-WEATHERCHECK_CONTACT@example.com")
+    contact = os.getenv("WEATHERCHECK_CONTACT", DEFAULT_CONTACT)
     return f"weathercheck/0.1 ({contact})"
 
 
@@ -37,11 +40,8 @@ class Location:
 
 
 def configured_location() -> Location:
-    latitude_text = os.getenv("WEATHERCHECK_LATITUDE")
-    longitude_text = os.getenv("WEATHERCHECK_LONGITUDE")
-
-    if not latitude_text or not longitude_text:
-        raise ApiError("WEATHERCHECK_LATITUDE and WEATHERCHECK_LONGITUDE must be set")
+    latitude_text = os.getenv("WEATHERCHECK_LATITUDE", str(DEFAULT_LATITUDE))
+    longitude_text = os.getenv("WEATHERCHECK_LONGITUDE", str(DEFAULT_LONGITUDE))
 
     try:
         latitude = float(latitude_text)

@@ -5,7 +5,9 @@
 ## Fixed Location
 
 - 표시 주소: `경기 연천군 장남면 장백로278번길 4`
-- 실제 조회는 환경변수 좌표를 사용합니다.
+- 기본 조회 좌표: `37.9851297299633,126.886246142811`
+- 기본 연락처: `jin0424@hanmail.net`
+- 필요하면 환경변수로 덮어쓸 수 있습니다.
 
 ## Run Locally
 
@@ -20,7 +22,7 @@ python .\app.py
 
 ## Vercel
 
-Vercel 환경변수에 아래 값을 넣어야 합니다.
+Vercel 환경변수는 선택 사항입니다. 기본값이 코드에 들어 있습니다.
 
 - `WEATHERCHECK_CONTACT`
 - `WEATHERCHECK_LATITUDE`
