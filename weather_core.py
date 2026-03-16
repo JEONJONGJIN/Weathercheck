@@ -129,6 +129,10 @@ def data_go_kr_service_key() -> str | None:
     return os.getenv("DATA_GO_KR_SERVICE_KEY") or os.getenv("SERVICE_KEY")
 
 
+def windy_api_key() -> str | None:
+    return os.getenv("WINDY_API_KEY")
+
+
 def format_number(value: float | None) -> str | None:
     if value is None or math.isnan(value):
         return None
@@ -410,6 +414,40 @@ def wind_direction_text(degrees: str | float | None) -> str | None:
     directions = ["북", "북동", "동", "남동", "남", "남서", "서", "북서"]
     index = int((value + 22.5) // 45) % 8
     return directions[index]
+
+
+def celsius_from_kelvin(value: float | None) -> float | None:
+    if value is None:
+        return None
+    return value - 273.15
+
+
+def wind_speed_from_uv(u_value: float | None, v_value: float | None) -> float | None:
+    if u_value is None or v_value is None:
+        return None
+    return math.sqrt(u_value * u_value + v_value * v_value)
+
+
+def wind_direction_angle_from_uv(u_value: float | None, v_value: float | None) -> float | None:
+    if u_value is None or v_value is None:
+        return None
+    angle = (math.degrees(math.atan2(u_value, v_value)) + 180.0) % 360.0
+    return angle
+
+
+def windy_precip_type_text(code: int | float | None) -> str | None:
+    value = coerce_float(code)
+    if value is None:
+        return None
+    mapping = {
+        0: None,
+        1: "비",
+        2: "눈",
+        3: "진눈깨비",
+        4: "어는 비",
+        5: "우박",
+    }
+    return mapping.get(int(value), "강수")
 
 
 def latest_kma_mid_base_datetime(now: datetime | None = None) -> str:
@@ -774,12 +812,104 @@ def kma_mid_forecast() -> dict[str, Any]:
     }
 
 
+def windy_forecast(location: Location) -> dict[str, Any]:
+    api_key = windy_api_key()
+    if not api_key:
+        raise ApiError("WINDY_API_KEY is not configured")
+
+    payload = {
+        "lat": location.latitude,
+        "lon": location.longitude,
+        "model": "gfs",
+        "parameters": ["temp", "precip", "wind", "ptype", "rh", "pressure"],
+        "levels": ["surface"],
+        "key": api_key,
+    }
+    request = urllib.request.Request(
+        "https://api.windy.com/api/point-forecast/v2",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": USER_AGENT,
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+            raw = json.loads(response.read().decode(response.headers.get_content_charset("utf-8")))
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise ApiError(f"{exc.code} {exc.reason}: {' '.join(body.split())[:180]}") from exc
+    except urllib.error.URLError as exc:
+        raise ApiError(str(exc.reason)) from exc
+
+    timestamps = raw.get("ts", [])
+    temps = raw.get("temp-surface", [])
+    precips = raw.get("past3hprecip-surface", [])
+    wind_us = raw.get("wind_u-surface", [])
+    wind_vs = raw.get("wind_v-surface", [])
+    ptypes = raw.get("ptype-surface", [])
+    humidities = raw.get("rh-surface", [])
+
+    timeline_rows = []
+    for index in range(min(len(timestamps), len(temps))):
+        time_value = datetime.fromtimestamp(timestamps[index] / 1000, tz=timezone.utc).astimezone(KST).isoformat()
+        timeline_rows.append(
+            timeline_entry(
+                time_value=time_value,
+                temperature_c=celsius_from_kelvin(coerce_float(temps[index])),
+                precip_probability=None,
+                condition=windy_precip_type_text(ptypes[index]) or "맑음",
+            )
+        )
+
+    upcoming_rows = future_timeline_rows(timeline_rows)
+    if not upcoming_rows:
+        upcoming_rows = timeline_rows
+    first_upcoming = upcoming_rows[0] if upcoming_rows else None
+    first_index = timeline_rows.index(first_upcoming) if first_upcoming in timeline_rows else 0
+
+    low, high = summarize_temperature([coerce_float(row.get("temperature_c")) for row in upcoming_rows])
+    wind_speed = wind_speed_from_uv(
+        coerce_float(wind_us[first_index]) if first_index < len(wind_us) else None,
+        coerce_float(wind_vs[first_index]) if first_index < len(wind_vs) else None,
+    )
+    wind_angle = wind_direction_angle_from_uv(
+        coerce_float(wind_us[first_index]) if first_index < len(wind_us) else None,
+        coerce_float(wind_vs[first_index]) if first_index < len(wind_vs) else None,
+    )
+
+    return {
+        "provider": "Windy",
+        "source_url": "https://api.windy.com/point-forecast/docs",
+        "current_temp_c": format_number(celsius_from_kelvin(coerce_float(temps[first_index])) if first_index < len(temps) else None),
+        "feels_like_c": None,
+        "condition": windy_precip_type_text(ptypes[first_index]) if first_index < len(ptypes) else None,
+        "precipitation_amount_mm": format_number(coerce_float(precips[first_index])) if first_index < len(precips) else None,
+        "next_6h_precip_probability": None,
+        "next_24h_low_c": format_number(low),
+        "next_24h_high_c": format_number(high),
+        "forecast_time": upcoming_rows[0]["time"] if upcoming_rows else None,
+        "time_label": "예보 시각",
+        "timeline": sample_every_3_hours(upcoming_rows),
+        "humidity": format_number(coerce_float(humidities[first_index])) if first_index < len(humidities) else None,
+        "wind_speed_ms": format_number(wind_speed),
+        "wind_direction_angle": format_number(wind_angle),
+        "wind_direction": wind_direction_text(wind_angle),
+        "precipitation_type": windy_precip_type_text(ptypes[first_index]) if first_index < len(ptypes) else None,
+        "prototype_note": "테스트용",
+    }
+
+
 def active_providers() -> list[tuple[str, Any]]:
     providers = [
         ("Open-Meteo", open_meteo_forecast),
     ]
     if data_go_kr_service_key():
         providers.append(("기상청 단기예보", kma_short_forecast))
+    if windy_api_key():
+        providers.append(("Windy", windy_forecast))
     return providers
 
 

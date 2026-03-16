@@ -281,6 +281,18 @@ a {
   color: inherit;
 }
 
+.provider-badge {
+  display: inline-block;
+  margin-left: 0.45rem;
+  padding: 0.18rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(20, 99, 86, 0.1);
+  color: var(--accent-strong);
+  font-size: 0.72rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
 .error-row td {
   color: var(--danger);
 }

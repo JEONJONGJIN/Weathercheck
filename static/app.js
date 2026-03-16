@@ -80,7 +80,10 @@ function renderProvider(provider) {
 
   return `
     <tr>
-      <td><a href="${provider.source_url}" target="_blank" rel="noreferrer">${provider.provider}</a></td>
+      <td>
+        <a href="${provider.source_url}" target="_blank" rel="noreferrer">${provider.provider}</a>
+        ${provider.prototype_note ? `<span class="provider-badge">${provider.prototype_note}</span>` : ""}
+      </td>
       <td>${formatCell(provider.current_temp_c, "°C")}</td>
       <td>${formatCell(provider.feels_like_c, "°C")}</td>
       <td>${formatCell(provider.condition)}</td>

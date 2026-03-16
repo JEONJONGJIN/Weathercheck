@@ -89,6 +89,10 @@ class HelpersTests(unittest.TestCase):
         self.assertEqual(app.wind_direction_text("0"), "북")
         self.assertEqual(app.wind_direction_text("90"), "동")
 
+    def test_windy_precip_type_text_maps_codes(self) -> None:
+        self.assertEqual(app.windy_precip_type_text(1), "비")
+        self.assertIsNone(app.windy_precip_type_text(0))
+
     def test_future_timeline_rows_filters_past_entries(self) -> None:
         now = datetime(2026, 3, 16, 10, 30, tzinfo=app.KST)
         rows = [

@@ -28,6 +28,7 @@ Vercel 환경변수는 선택 사항입니다. 기본값이 코드에 들어 있
 - `WEATHERCHECK_LATITUDE`
 - `WEATHERCHECK_LONGITUDE`
 - `DATA_GO_KR_SERVICE_KEY`
+- `WINDY_API_KEY`
 
 ## Current MVP
 
@@ -35,6 +36,7 @@ Vercel 환경변수는 선택 사항입니다. 기본값이 코드에 들어 있
 - 고정 좌표 기준 조회
 - Open-Meteo, 기상청 단기예보 비교
 - `DATA_GO_KR_SERVICE_KEY`가 있으면 기상청 중기예보 추가
+- `WINDY_API_KEY`가 있으면 Windy 테스트용 provider 추가
 - 현재 기온, 체감 기온, 상태, 6시간 강수 확률, 24시간 최저/최고 비교
 - 3시간 간격 24시간 타임라인 비교
 - 소스 간 편차 요약
