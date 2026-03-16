@@ -206,7 +206,7 @@ function renderMetrics(consensus) {
 }
 
 async function loadForecast() {
-  statusBox.textContent = "무료 API들을 조회하는 중입니다...";
+  statusBox.textContent = "날씨 API를 조회중입니다.";
   resultSection.classList.add("hidden");
   tableBody.innerHTML = "";
   timelineHead.innerHTML = "";
