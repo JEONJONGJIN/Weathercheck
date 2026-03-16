@@ -299,6 +299,18 @@ def summarize_korean_bulletin(value: str | None, limit: int = 36) -> str | None:
     return normalized[: limit - 1].rstrip() + "…"
 
 
+def first_sentence(value: str | None) -> str | None:
+    if not value:
+        return None
+    normalized = " ".join(value.split())
+    for separator in [". ", "다. ", "\n"]:
+        if separator in normalized:
+            candidate = normalized.split(separator)[0].strip()
+            if candidate:
+                return candidate
+    return normalized
+
+
 def open_meteo_forecast(location: Location) -> dict[str, Any]:
     query = urllib.parse.urlencode(
         {
@@ -496,9 +508,7 @@ def kma_bulletin_forecast(location: Location) -> dict[str, Any]:
     overview = entry.get("wfSv1") or ""
     notice = entry.get("wn") or ""
     reserve_notice = entry.get("wr") or ""
-    summary = summarize_korean_bulletin(overview) or summarize_korean_bulletin(notice) or "기상 통보문"
-    if notice and notice != "없음":
-        summary = f"{summary} / 특보 {summarize_korean_bulletin(notice, 18)}"
+    summary = first_sentence(overview) or first_sentence(notice) or "기상 통보문"
 
     return {
         "provider": "기상청 통보문",
@@ -511,6 +521,7 @@ def kma_bulletin_forecast(location: Location) -> dict[str, Any]:
         "next_24h_high_c": None,
         "forecast_time": entry.get("tmFc"),
         "timeline": [],
+        "bulletin_summary": summary,
         "bulletin_overview": overview or None,
         "bulletin_notice": notice or None,
         "bulletin_preliminary_notice": reserve_notice or None,

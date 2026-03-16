@@ -68,6 +68,10 @@ class HelpersTests(unittest.TestCase):
         text = "오늘은 대체로 흐리겠고 늦은 오후부터 비가 내리겠습니다. 내일은 맑겠습니다."
         self.assertEqual(app.summarize_korean_bulletin(text, limit=20), "오늘은 대체로 흐리겠고 늦은 오후부…")
 
+    def test_first_sentence_extracts_without_truncation(self) -> None:
+        text = "오늘은 대체로 흐리겠고 늦은 오후부터 비가 내리겠습니다. 내일은 맑겠습니다."
+        self.assertEqual(app.first_sentence(text), "오늘은 대체로 흐리겠고 늦은 오후부터 비가 내리겠습니다")
+
 
 class ConsensusTests(unittest.TestCase):
     def test_build_consensus_aggregates_summary_and_timeline(self) -> None:

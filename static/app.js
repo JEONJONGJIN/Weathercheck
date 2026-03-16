@@ -10,6 +10,11 @@ const metricCurrentSpread = document.querySelector("#metric-current-spread");
 const metricPrecipSpread = document.querySelector("#metric-precip-spread");
 const timelineHead = document.querySelector("#timeline-head");
 const timelineBody = document.querySelector("#timeline-body");
+const bulletinPanel = document.querySelector("#bulletin-panel");
+const bulletinSummary = document.querySelector("#bulletin-summary");
+const bulletinNotice = document.querySelector("#bulletin-notice");
+const bulletinPreliminary = document.querySelector("#bulletin-preliminary");
+const bulletinOverview = document.querySelector("#bulletin-overview");
 
 function formatCell(value, suffix = "") {
   if (value === null || value === undefined || value === "") {
@@ -58,6 +63,24 @@ function renderProvider(provider) {
       <td>${formatDateTime(provider.forecast_time)}</td>
     </tr>
   `;
+}
+
+function renderBulletin(providers) {
+  const provider = providers.find((item) => item.provider === "기상청 통보문" && !item.error);
+  if (!provider) {
+    bulletinPanel.classList.add("hidden");
+    bulletinSummary.textContent = "";
+    bulletinNotice.textContent = "";
+    bulletinPreliminary.textContent = "";
+    bulletinOverview.textContent = "";
+    return;
+  }
+
+  bulletinSummary.textContent = provider.bulletin_summary || provider.condition || "-";
+  bulletinNotice.textContent = provider.bulletin_notice || "-";
+  bulletinPreliminary.textContent = provider.bulletin_preliminary_notice || "-";
+  bulletinOverview.textContent = provider.bulletin_overview || "-";
+  bulletinPanel.classList.remove("hidden");
 }
 
 function renderTimelineHeader(consensus) {
@@ -164,6 +187,7 @@ async function loadForecast() {
     latitude.textContent = payload.location.latitude.toFixed(4);
     longitude.textContent = payload.location.longitude.toFixed(4);
     tableBody.innerHTML = payload.providers.map(renderProvider).join("");
+    renderBulletin(payload.providers);
     renderMetrics(payload.consensus);
     renderTimelineHeader(payload.consensus);
     renderTimelineRows(payload.providers, payload.consensus);
