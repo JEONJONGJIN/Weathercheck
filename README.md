@@ -29,6 +29,7 @@ Vercel 환경변수는 선택 사항입니다. 기본값이 코드에 들어 있
 - `WEATHERCHECK_LONGITUDE`
 - `DATA_GO_KR_SERVICE_KEY`
 - `WINDY_API_KEY`
+- `KMA_APIHUB_AUTH_KEY`
 
 ## Current MVP
 

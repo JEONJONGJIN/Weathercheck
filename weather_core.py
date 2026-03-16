@@ -133,6 +133,10 @@ def windy_api_key() -> str | None:
     return os.getenv("WINDY_API_KEY")
 
 
+def kma_apihub_auth_key() -> str | None:
+    return os.getenv("KMA_APIHUB_AUTH_KEY")
+
+
 def format_number(value: float | None) -> str | None:
     if value is None or math.isnan(value):
         return None
@@ -898,7 +902,6 @@ def windy_forecast(location: Location) -> dict[str, Any]:
         "wind_direction_angle": format_number(wind_angle),
         "wind_direction": wind_direction_text(wind_angle),
         "precipitation_type": windy_precip_type_text(ptypes[first_index]) if first_index < len(ptypes) else None,
-        "prototype_note": "테스트용",
     }
 
 
