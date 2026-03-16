@@ -56,6 +56,14 @@ class HelpersTests(unittest.TestCase):
         sampled = app.sample_every_n_rows(rows, target_count=8)
         self.assertEqual(len(sampled), 8)
 
+    def test_translate_condition_text_returns_korean(self) -> None:
+        self.assertEqual(app.translate_condition_text("Patchy rain nearby"), "주변에 비 가능성")
+        self.assertEqual(app.translate_condition_text("Heavy snow"), "강한 눈")
+
+    def test_translate_met_symbol_returns_korean(self) -> None:
+        self.assertEqual(app.translate_met_symbol("partlycloudy_day"), "구름 조금")
+        self.assertEqual(app.translate_met_symbol("rainshowers_day"), "소나기")
+
 
 class ConsensusTests(unittest.TestCase):
     def test_build_consensus_aggregates_summary_and_timeline(self) -> None:

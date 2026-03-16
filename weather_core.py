@@ -117,29 +117,121 @@ def numeric_spread(values: list[float | None]) -> float | None:
 
 def normalize_condition_from_wmo(code: int | None) -> str | None:
     mapping = {
-        0: "Clear",
-        1: "Mostly clear",
-        2: "Partly cloudy",
-        3: "Overcast",
-        45: "Fog",
-        48: "Rime fog",
-        51: "Light drizzle",
-        53: "Drizzle",
-        55: "Dense drizzle",
-        61: "Light rain",
-        63: "Rain",
-        65: "Heavy rain",
-        71: "Light snow",
-        73: "Snow",
-        75: "Heavy snow",
-        80: "Rain showers",
-        81: "Heavy rain showers",
-        82: "Violent rain showers",
-        95: "Thunderstorm",
-        96: "Thunderstorm with hail",
-        99: "Severe thunderstorm with hail",
+        0: "맑음",
+        1: "대체로 맑음",
+        2: "구름 조금",
+        3: "흐림",
+        45: "안개",
+        48: "착빙 안개",
+        51: "약한 이슬비",
+        53: "이슬비",
+        55: "강한 이슬비",
+        61: "약한 비",
+        63: "비",
+        65: "강한 비",
+        71: "약한 눈",
+        73: "눈",
+        75: "강한 눈",
+        80: "소나기",
+        81: "강한 소나기",
+        82: "매우 강한 소나기",
+        95: "뇌우",
+        96: "우박 동반 뇌우",
+        99: "강한 우박 동반 뇌우",
     }
-    return mapping.get(code, "Unknown")
+    return mapping.get(code, "알 수 없음")
+
+
+def translate_met_symbol(symbol_code: str | None) -> str | None:
+    if not symbol_code:
+        return None
+
+    base = symbol_code.split("_")[0]
+    mapping = {
+        "clearsky": "맑음",
+        "fair": "대체로 맑음",
+        "partlycloudy": "구름 조금",
+        "cloudy": "흐림",
+        "fog": "안개",
+        "lightrain": "약한 비",
+        "rain": "비",
+        "heavyrain": "강한 비",
+        "lightrainshowers": "약한 소나기",
+        "rainshowers": "소나기",
+        "heavyrainshowers": "강한 소나기",
+        "lightsleet": "약한 진눈깨비",
+        "sleet": "진눈깨비",
+        "heavysleet": "강한 진눈깨비",
+        "lightsnow": "약한 눈",
+        "snow": "눈",
+        "heavysnow": "강한 눈",
+        "lightsnowshowers": "약한 눈 소나기",
+        "snowshowers": "눈 소나기",
+        "heavysnowshowers": "강한 눈 소나기",
+        "rainandthunder": "비와 천둥",
+        "rainshowersandthunder": "소나기와 천둥",
+        "sleetandthunder": "진눈깨비와 천둥",
+        "snowandthunder": "눈과 천둥",
+        "snowshowersandthunder": "눈 소나기와 천둥",
+    }
+    return mapping.get(base, translate_condition_text(base.replace("_", " ")))
+
+
+def translate_condition_text(value: str | None) -> str | None:
+    if not value:
+        return None
+
+    normalized = value.strip().lower().replace("_", " ")
+    exact_mapping = {
+        "sunny": "맑음",
+        "clear": "맑음",
+        "mostly clear": "대체로 맑음",
+        "partly cloudy": "구름 조금",
+        "cloudy": "흐림",
+        "overcast": "흐림",
+        "mist": "박무",
+        "fog": "안개",
+        "freezing fog": "어는 안개",
+        "patchy rain nearby": "주변에 비 가능성",
+        "light drizzle": "약한 이슬비",
+        "drizzle": "이슬비",
+        "light rain": "약한 비",
+        "moderate rain": "비",
+        "heavy rain": "강한 비",
+        "light rain shower": "약한 소나기",
+        "moderate or heavy rain shower": "강한 소나기",
+        "patchy light rain": "약한 비",
+        "patchy light drizzle": "약한 이슬비",
+        "light sleet": "약한 진눈깨비",
+        "moderate or heavy sleet": "강한 진눈깨비",
+        "light snow": "약한 눈",
+        "patchy snow nearby": "주변에 눈 가능성",
+        "moderate snow": "눈",
+        "heavy snow": "강한 눈",
+        "thundery outbreaks nearby": "주변에 뇌우 가능성",
+        "thunderstorm": "뇌우",
+    }
+    if normalized in exact_mapping:
+        return exact_mapping[normalized]
+
+    contains_mapping = [
+        ("thunder", "천둥"),
+        ("sleet", "진눈깨비"),
+        ("snow", "눈"),
+        ("drizzle", "이슬비"),
+        ("shower", "소나기"),
+        ("rain", "비"),
+        ("fog", "안개"),
+        ("mist", "박무"),
+        ("cloud", "흐림"),
+        ("clear", "맑음"),
+        ("sun", "맑음"),
+    ]
+    for token, translated in contains_mapping:
+        if token in normalized:
+            return translated
+
+    return value
 
 
 def timeline_entry(
@@ -238,10 +330,11 @@ def met_norway_forecast(location: Location) -> dict[str, Any]:
                 temperature_c=coerce_float(entry["data"]["instant"]["details"].get("air_temperature")),
                 precip_probability=precip_probability,
                 condition=(
-                    one_hour.get("summary", {}).get("symbol_code", "")
-                    or six_hours.get("summary", {}).get("symbol_code", "")
-                ).replace("_", " ")
-                or None,
+                    translate_met_symbol(
+                        one_hour.get("summary", {}).get("symbol_code", "")
+                        or six_hours.get("summary", {}).get("symbol_code", "")
+                    )
+                ),
             )
         )
 
@@ -252,11 +345,11 @@ def met_norway_forecast(location: Location) -> dict[str, Any]:
         "current_temp_c": format_number(coerce_float(details.get("air_temperature"))),
         "feels_like_c": None,
         "condition": (
-            current["data"].get("next_1_hours", {})
-            .get("summary", {})
-            .get("symbol_code", "")
-            .replace("_", " ")
-            or None
+            translate_met_symbol(
+                current["data"].get("next_1_hours", {})
+                .get("summary", {})
+                .get("symbol_code", "")
+            )
         ),
         "next_6h_precip_probability": format_number(summarize_window(precip_candidates[:6])),
         "next_24h_low_c": format_number(low),
@@ -293,7 +386,7 @@ def wttr_forecast(location: Location) -> dict[str, Any]:
                     temperature_c=coerce_float(slot.get("tempC")),
                     precip_probability=precip_probability,
                     condition=(
-                        slot.get("weatherDesc", [{}])[0].get("value")
+                        translate_condition_text(slot.get("weatherDesc", [{}])[0].get("value"))
                         if slot.get("weatherDesc")
                         else None
                     ),
@@ -308,7 +401,7 @@ def wttr_forecast(location: Location) -> dict[str, Any]:
         "current_temp_c": format_number(coerce_float(current.get("temp_C"))),
         "feels_like_c": format_number(coerce_float(current.get("FeelsLikeC"))),
         "condition": (
-            current.get("weatherDesc", [{}])[0].get("value")
+            translate_condition_text(current.get("weatherDesc", [{}])[0].get("value"))
             if current.get("weatherDesc")
             else None
         ),
