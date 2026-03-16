@@ -10,6 +10,12 @@ class ParseLatLonTests(unittest.TestCase):
     def test_rejects_invalid_coordinates(self) -> None:
         self.assertIsNone(app.parse_lat_lon("200,100"))
 
+    def test_geocode_query_candidates_broaden_korean_address(self) -> None:
+        candidates = app.geocode_query_candidates("경기 연천군 장남면 장백로278번길 4")
+        self.assertEqual(candidates[0], "경기 연천군 장남면 장백로278번길 4")
+        self.assertIn("경기도 연천군 장남면 장백로278번길 4", candidates)
+        self.assertIn("경기 연천군 장남면", candidates)
+
 
 class HelpersTests(unittest.TestCase):
     def test_summarize_window_returns_max(self) -> None:

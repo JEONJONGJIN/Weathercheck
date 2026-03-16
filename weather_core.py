@@ -92,32 +92,35 @@ def geocode_address(query: str) -> Location:
 
 
 def geocode_with_open_meteo(query: str) -> Location | None:
-    encoded = urllib.parse.urlencode(
-        {
-            "name": query,
-            "count": 1,
-            "language": "ko",
-            "format": "json",
-        }
-    )
-    try:
-        payload = fetch_json(f"https://geocoding-api.open-meteo.com/v1/search?{encoded}")
-    except ApiError:
-        return None
+    for candidate in geocode_query_candidates(query):
+        encoded = urllib.parse.urlencode(
+            {
+                "name": candidate,
+                "count": 1,
+                "language": "ko",
+                "format": "json",
+            }
+        )
+        try:
+            payload = fetch_json(f"https://geocoding-api.open-meteo.com/v1/search?{encoded}")
+        except ApiError:
+            continue
 
-    results = payload.get("results") or []
-    if not results:
-        return None
+        results = payload.get("results") or []
+        if not results:
+            continue
 
-    match = results[0]
-    name_parts = [match.get("name"), match.get("admin1"), match.get("country")]
-    display_name = ", ".join(part for part in name_parts if part)
-    return Location(
-        query=query,
-        display_name=display_name or query,
-        latitude=float(match["latitude"]),
-        longitude=float(match["longitude"]),
-    )
+        match = results[0]
+        name_parts = [match.get("name"), match.get("admin1"), match.get("country")]
+        display_name = ", ".join(part for part in name_parts if part)
+        return Location(
+            query=query,
+            display_name=display_name or candidate,
+            latitude=float(match["latitude"]),
+            longitude=float(match["longitude"]),
+        )
+
+    return None
 
 
 def geocode_with_nominatim(query: str) -> Location | None:
@@ -144,6 +147,52 @@ def geocode_with_nominatim(query: str) -> Location | None:
         latitude=float(match["lat"]),
         longitude=float(match["lon"]),
     )
+
+
+def geocode_query_candidates(query: str) -> list[str]:
+    compact = " ".join(query.split())
+    if not compact:
+        return []
+
+    province_aliases = {
+        "경기": "경기도",
+        "서울": "서울특별시",
+        "부산": "부산광역시",
+        "대구": "대구광역시",
+        "인천": "인천광역시",
+        "광주": "광주광역시",
+        "대전": "대전광역시",
+        "울산": "울산광역시",
+        "세종": "세종특별자치시",
+        "강원": "강원특별자치도",
+        "충북": "충청북도",
+        "충남": "충청남도",
+        "전북": "전북특별자치도",
+        "전남": "전라남도",
+        "경북": "경상북도",
+        "경남": "경상남도",
+        "제주": "제주특별자치도",
+    }
+
+    candidates: list[str] = [compact]
+    parts = compact.split(" ")
+    if parts and parts[0] in province_aliases:
+        expanded = " ".join([province_aliases[parts[0]], *parts[1:]])
+        candidates.append(expanded)
+
+    for base in list(candidates):
+        base_parts = base.split(" ")
+        for end in range(len(base_parts) - 1, 1, -1):
+            shortened = " ".join(base_parts[:end])
+            candidates.append(shortened)
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        if candidate not in seen:
+            deduped.append(candidate)
+            seen.add(candidate)
+    return deduped
 
 
 def format_number(value: float | None) -> str | None:
