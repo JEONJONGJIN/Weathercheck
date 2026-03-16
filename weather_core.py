@@ -18,6 +18,8 @@ DEFAULT_CONTACT = "jin0424@hanmail.net"
 DEFAULT_LATITUDE = 37.9851297299633
 DEFAULT_LONGITUDE = 126.886246142811
 KST = timezone(timedelta(hours=9))
+KMA_MID_LAND_REG_ID = os.getenv("KMA_MID_LAND_REG_ID", "11B00000")
+KMA_MID_TA_REG_ID = os.getenv("KMA_MID_TA_REG_ID", "11B10101")
 
 
 def default_user_agent() -> str:
@@ -355,6 +357,35 @@ def kma_condition_text(sky: str | None, pty: str | None) -> str | None:
     return kma_sky_text(sky)
 
 
+def latest_kma_mid_base_datetime(now: datetime | None = None) -> str:
+    current = now.astimezone(KST) if now else datetime.now(KST)
+    if current.hour >= 18:
+        candidate = current.replace(hour=18, minute=0, second=0, microsecond=0)
+    elif current.hour >= 6:
+        candidate = current.replace(hour=6, minute=0, second=0, microsecond=0)
+    else:
+        previous = current - timedelta(days=1)
+        candidate = previous.replace(hour=18, minute=0, second=0, microsecond=0)
+    return candidate.strftime("%Y%m%d%H00")
+
+
+def fetch_data_go_kr_payload(service_path: str, params: str, service_key: str) -> dict[str, Any]:
+    candidate_urls = [
+        f"http://apis.data.go.kr{service_path}?serviceKey={service_key}{params}",
+        f"https://apis.data.go.kr{service_path}?serviceKey={service_key}{params}",
+        f"http://apis.data.go.kr{service_path}?serviceKey={urllib.parse.quote(service_key, safe='')}{params}",
+        f"https://apis.data.go.kr{service_path}?serviceKey={urllib.parse.quote(service_key, safe='')}{params}",
+    ]
+
+    last_error: Exception | None = None
+    for url in candidate_urls:
+        try:
+            return json.loads(fetch_text(url))
+        except Exception as exc:
+            last_error = exc
+    raise ApiError(str(last_error) if last_error else "data.go.kr request failed")
+
+
 def group_kma_forecast_rows(items: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
     grouped: dict[str, dict[str, str]] = {}
     for item in items:
@@ -405,6 +436,7 @@ def open_meteo_forecast(location: Location) -> dict[str, Any]:
         "next_24h_low_c": format_number(low),
         "next_24h_high_c": format_number(high),
         "forecast_time": current.get("time"),
+        "time_label": "예보 시각",
         "timeline": sample_every_n_rows(timeline_rows),
     }
 
@@ -538,25 +570,11 @@ def kma_short_forecast(location: Location) -> dict[str, Any]:
         f"&nx={nx}"
         f"&ny={ny}"
     )
-    candidate_urls = [
-        f"http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey={service_key}{base_params}",
-        f"https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey={service_key}{base_params}",
-        f"http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey={urllib.parse.quote(service_key, safe='')}{base_params}",
-        f"https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey={urllib.parse.quote(service_key, safe='')}{base_params}",
-    ]
-
-    last_error: Exception | None = None
-    payload = None
-    for url in candidate_urls:
-        try:
-            raw = fetch_text(url)
-            payload = json.loads(raw)
-            break
-        except Exception as exc:
-            last_error = exc
-
-    if payload is None:
-        raise ApiError(str(last_error) if last_error else "KMA short forecast request failed")
+    payload = fetch_data_go_kr_payload(
+        "/1360000/VilageFcstInfoService_2.0/getVilageFcst",
+        base_params,
+        service_key,
+    )
 
     header = payload.get("response", {}).get("header", {})
     if header.get("resultCode") not in (None, "00"):
@@ -599,17 +617,92 @@ def kma_short_forecast(location: Location) -> dict[str, Any]:
         "next_24h_low_c": format_number(min(min_candidates)) if min_candidates else None,
         "next_24h_high_c": format_number(max(max_candidates)) if max_candidates else None,
         "forecast_time": f"{base_date}T{base_time[:2]}:{base_time[2:]}:00+09:00",
+        "time_label": "발표 시각",
         "timeline": sample_every_n_rows(timeline_rows),
         "humidity": first_bucket.get("REH"),
         "wind_speed_ms": first_bucket.get("WSD"),
     }
 
 
+def kma_mid_forecast() -> dict[str, Any]:
+    service_key = data_go_kr_service_key()
+    if not service_key:
+        raise ApiError("DATA_GO_KR_SERVICE_KEY is not configured")
+
+    tm_fc = latest_kma_mid_base_datetime()
+    land_params = (
+        f"&pageNo=1"
+        f"&numOfRows=10"
+        f"&dataType=JSON"
+        f"&regId={urllib.parse.quote(KMA_MID_LAND_REG_ID, safe='')}"
+        f"&tmFc={tm_fc}"
+    )
+    ta_params = (
+        f"&pageNo=1"
+        f"&numOfRows=10"
+        f"&dataType=JSON"
+        f"&regId={urllib.parse.quote(KMA_MID_TA_REG_ID, safe='')}"
+        f"&tmFc={tm_fc}"
+    )
+    land_payload = fetch_data_go_kr_payload(
+        "/1360000/MidFcstInfoService/getMidLandFcst",
+        land_params,
+        service_key,
+    )
+    ta_payload = fetch_data_go_kr_payload(
+        "/1360000/MidFcstInfoService/getMidTa",
+        ta_params,
+        service_key,
+    )
+
+    land_header = land_payload.get("response", {}).get("header", {})
+    ta_header = ta_payload.get("response", {}).get("header", {})
+    if land_header.get("resultCode") not in (None, "00"):
+        raise ApiError(f"{land_header.get('resultCode')} {land_header.get('resultMsg')}")
+    if ta_header.get("resultCode") not in (None, "00"):
+        raise ApiError(f"{ta_header.get('resultCode')} {ta_header.get('resultMsg')}")
+
+    land_items = land_payload.get("response", {}).get("body", {}).get("items", {}).get("item", [])
+    ta_items = ta_payload.get("response", {}).get("body", {}).get("items", {}).get("item", [])
+    if not land_items or not ta_items:
+        raise ApiError("KMA mid forecast returned no items")
+
+    land = land_items[0]
+    ta = ta_items[0]
+    days = []
+    for day in range(3, 11):
+        am_key = f"wf{day}Am"
+        pm_key = f"wf{day}Pm"
+        low_key = f"taMin{day}"
+        high_key = f"taMax{day}"
+        am_text = land.get(am_key) or None
+        pm_text = land.get(pm_key) or am_text
+        low = ta.get(low_key)
+        high = ta.get(high_key)
+        if am_text is None and pm_text is None and low is None and high is None:
+            continue
+        days.append(
+            {
+                "day_offset": day,
+                "am_condition": translate_condition_text(am_text) if am_text else None,
+                "pm_condition": translate_condition_text(pm_text) if pm_text else None,
+                "low_c": format_number(coerce_float(low)),
+                "high_c": format_number(coerce_float(high)),
+            }
+        )
+
+    return {
+        "provider": "기상청 중기예보",
+        "source_url": "https://www.data.go.kr/data/15059468/openapi.do",
+        "forecast_time": f"{tm_fc[:4]}-{tm_fc[4:6]}-{tm_fc[6:8]}T{tm_fc[8:10]}:00:00+09:00",
+        "time_label": "발표 시각",
+        "days": days,
+    }
+
+
 def active_providers() -> list[tuple[str, Any]]:
     providers = [
         ("Open-Meteo", open_meteo_forecast),
-        ("MET Norway", met_norway_forecast),
-        ("wttr.in", wttr_forecast),
     ]
     if data_go_kr_service_key():
         providers.append(("기상청 단기예보", kma_short_forecast))
@@ -673,6 +766,11 @@ def collect_fixed_location_forecasts() -> dict[str, Any]:
             "longitude": location.longitude,
         },
         "providers": providers,
+        "mid_forecast": (
+            kma_mid_forecast()
+            if data_go_kr_service_key()
+            else None
+        ),
         "consensus": build_consensus(providers),
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }

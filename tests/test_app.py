@@ -73,6 +73,11 @@ class HelpersTests(unittest.TestCase):
         self.assertEqual(app.kma_condition_text("1", "0"), "맑음")
         self.assertEqual(app.kma_condition_text("4", "1"), "비")
 
+    def test_latest_kma_mid_base_datetime_returns_supported_cycle(self) -> None:
+        value = app.latest_kma_mid_base_datetime()
+        self.assertEqual(len(value), 12)
+        self.assertIn(value[8:10], {"06", "18"})
+
 
 class ConsensusTests(unittest.TestCase):
     def test_build_consensus_aggregates_summary_and_timeline(self) -> None:

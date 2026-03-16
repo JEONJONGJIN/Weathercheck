@@ -73,12 +73,23 @@
                 <th>6시간 강수 확률</th>
                 <th>24시간 최저</th>
                 <th>24시간 최고</th>
-                <th>시각</th>
+                <th>기준 시각</th>
               </tr>
             </thead>
             <tbody id="forecast-table"></tbody>
           </table>
         </div>
+
+        <section id="mid-forecast-panel" class="mid-forecast-panel hidden">
+          <div class="section-head">
+            <div>
+              <p class="muted">기상청 중기예보</p>
+              <h3>3일에서 10일 전망</h3>
+            </div>
+            <p id="mid-forecast-time" class="section-note"></p>
+          </div>
+          <div id="mid-forecast-grid" class="mid-forecast-grid"></div>
+        </section>
 
         <section class="timeline-panel">
           <div class="section-head">

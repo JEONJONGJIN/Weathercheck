@@ -10,6 +10,9 @@ const metricCurrentSpread = document.querySelector("#metric-current-spread");
 const metricPrecipSpread = document.querySelector("#metric-precip-spread");
 const timelineHead = document.querySelector("#timeline-head");
 const timelineBody = document.querySelector("#timeline-body");
+const midForecastPanel = document.querySelector("#mid-forecast-panel");
+const midForecastTime = document.querySelector("#mid-forecast-time");
+const midForecastGrid = document.querySelector("#mid-forecast-grid");
 
 function formatCell(value, suffix = "") {
   if (value === null || value === undefined || value === "") {
@@ -34,6 +37,17 @@ function formatDateTime(value) {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatTimeWithLabel(value, label) {
+  const formatted = formatDateTime(value);
+  if (!label) {
+    return formatted;
+  }
+  return `
+    <div>${formatted}</div>
+    <div class="provider-subline">${label}</div>
+  `;
 }
 
 function renderProvider(provider) {
@@ -64,9 +78,31 @@ function renderProvider(provider) {
       <td>${formatCell(provider.next_6h_precip_probability, "%")}</td>
       <td>${formatCell(provider.next_24h_low_c, "°C")}</td>
       <td>${formatCell(provider.next_24h_high_c, "°C")}</td>
-      <td>${formatDateTime(provider.forecast_time)}</td>
+      <td>${formatTimeWithLabel(provider.forecast_time, provider.time_label)}</td>
     </tr>
   `;
+}
+
+function renderMidForecast(midForecast) {
+  if (!midForecast || !midForecast.days || !midForecast.days.length) {
+    midForecastPanel.classList.add("hidden");
+    midForecastGrid.innerHTML = "";
+    midForecastTime.textContent = "";
+    return;
+  }
+
+  midForecastTime.textContent = `${midForecast.time_label || "발표 시각"} ${formatDateTime(midForecast.forecast_time)}`;
+  midForecastGrid.innerHTML = midForecast.days
+    .map((day) => `
+      <article class="mid-card">
+        <p class="mid-day">+${day.day_offset}일</p>
+        <p class="mid-condition">오전 ${formatCell(day.am_condition)}</p>
+        <p class="mid-condition">오후 ${formatCell(day.pm_condition)}</p>
+        <p class="mid-temp">${formatCell(day.low_c, "°C")} / ${formatCell(day.high_c, "°C")}</p>
+      </article>
+    `)
+    .join("");
+  midForecastPanel.classList.remove("hidden");
 }
 
 function renderTimelineHeader(consensus) {
@@ -174,6 +210,7 @@ async function loadForecast() {
     longitude.textContent = payload.location.longitude.toFixed(4);
     tableBody.innerHTML = payload.providers.map(renderProvider).join("");
     renderMetrics(payload.consensus);
+    renderMidForecast(payload.mid_forecast);
     renderTimelineHeader(payload.consensus);
     renderTimelineRows(payload.providers, payload.consensus);
     resultSection.classList.remove("hidden");
