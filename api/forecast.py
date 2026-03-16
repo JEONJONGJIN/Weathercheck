@@ -1,22 +1,13 @@
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
-from urllib.parse import parse_qs, urlparse
 
-from weather_core import ApiError, collect_forecasts
+from weather_core import ApiError, collect_fixed_location_forecasts
 
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        parsed = urlparse(self.path)
-        params = parse_qs(parsed.query)
-        address = (params.get("address") or [""])[0].strip()
-
-        if not address:
-            self._write_json({"error": "address is required"}, status=HTTPStatus.BAD_REQUEST)
-            return
-
         try:
-            self._write_json(collect_forecasts(address))
+            self._write_json(collect_fixed_location_forecasts())
         except ApiError as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_GATEWAY)
         except Exception as exc:

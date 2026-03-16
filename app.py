@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from weather_core import ApiError, collect_forecasts
+from weather_core import ApiError, collect_fixed_location_forecasts
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -32,11 +32,10 @@ class WeatherCheckHandler(BaseHTTPRequestHandler):
             self.serve_file(BASE_DIR / "index.html")
             return
         if parsed.path.startswith("/static/"):
-            local = STATIC_DIR / parsed.path.removeprefix("/static/")
-            self.serve_file(local)
+            self.serve_file(STATIC_DIR / parsed.path.removeprefix("/static/"))
             return
         if parsed.path == "/api/forecast":
-            self.serve_forecast(parsed.query)
+            self.serve_forecast()
             return
         self.send_error(HTTPStatus.NOT_FOUND, "Not found")
 
@@ -51,15 +50,9 @@ class WeatherCheckHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(content)
 
-    def serve_forecast(self, query_string: str) -> None:
-        params = urllib.parse.parse_qs(query_string)
-        address = (params.get("address") or [""])[0].strip()
-        if not address:
-            self.write_json({"error": "address is required"}, status=HTTPStatus.BAD_REQUEST)
-            return
+    def serve_forecast(self) -> None:
         try:
-            payload = collect_forecasts(address)
-            self.write_json(payload)
+            self.write_json(collect_fixed_location_forecasts())
         except ApiError as exc:
             self.write_json({"error": str(exc)}, status=HTTPStatus.BAD_GATEWAY)
         except Exception as exc:

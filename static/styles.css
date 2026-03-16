@@ -2,7 +2,6 @@
   --bg: #eef4f1;
   --bg-accent: #d8e6df;
   --panel: rgba(255, 255, 255, 0.82);
-  --panel-strong: #ffffff;
   --text: #10211d;
   --muted: #576b65;
   --line: rgba(16, 33, 29, 0.12);
@@ -76,24 +75,21 @@ h1 {
   padding: 1.5rem;
 }
 
-.search-form label {
-  display: block;
-  margin-bottom: 0.75rem;
+.fixed-label {
+  margin: 0 0 0.75rem;
   font-weight: 700;
 }
 
-.search-row {
+.fixed-address-row {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 0.8rem;
 }
 
-input,
-button {
-  font: inherit;
-}
-
-input {
+.fixed-address-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
   min-width: 0;
   padding: 1rem 1.1rem;
   border-radius: 16px;
@@ -101,7 +97,16 @@ input {
   background: rgba(255, 255, 255, 0.9);
 }
 
+.fixed-address-card strong {
+  font-size: 1.05rem;
+}
+
+.fixed-address-card span {
+  color: var(--muted);
+}
+
 button {
+  font: inherit;
   border: 0;
   border-radius: 16px;
   padding: 1rem 1.25rem;
@@ -109,19 +114,6 @@ button {
   color: white;
   font-weight: 800;
   cursor: pointer;
-}
-
-.examples {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  margin-top: 1rem;
-}
-
-.chip {
-  background: rgba(20, 99, 86, 0.08);
-  color: var(--accent-strong);
-  padding: 0.65rem 0.9rem;
 }
 
 .status {
@@ -284,7 +276,7 @@ a {
     padding-top: 2rem;
   }
 
-  .search-row {
+  .fixed-address-row {
     grid-template-columns: 1fr;
   }
 

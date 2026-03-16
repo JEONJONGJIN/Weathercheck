@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import math
 import os
-import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -14,6 +13,7 @@ from typing import Any
 
 REQUEST_TIMEOUT_SECONDS = 12
 TIMELINE_POINT_COUNT = 8
+FIXED_LOCATION_LABEL = "경기 연천군 장남면 장백로278번길 4"
 
 
 def default_user_agent() -> str:
@@ -36,6 +36,30 @@ class Location:
     longitude: float
 
 
+def configured_location() -> Location:
+    latitude_text = os.getenv("WEATHERCHECK_LATITUDE")
+    longitude_text = os.getenv("WEATHERCHECK_LONGITUDE")
+
+    if not latitude_text or not longitude_text:
+        raise ApiError("WEATHERCHECK_LATITUDE and WEATHERCHECK_LONGITUDE must be set")
+
+    try:
+        latitude = float(latitude_text)
+        longitude = float(longitude_text)
+    except ValueError as exc:
+        raise ApiError("fixed coordinates are invalid") from exc
+
+    if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+        raise ApiError("fixed coordinates are out of range")
+
+    return Location(
+        query=FIXED_LOCATION_LABEL,
+        display_name=FIXED_LOCATION_LABEL,
+        latitude=latitude,
+        longitude=longitude,
+    )
+
+
 def fetch_json(url: str, headers: dict[str, str] | None = None) -> Any:
     request_headers = {
         "User-Agent": USER_AGENT,
@@ -43,6 +67,7 @@ def fetch_json(url: str, headers: dict[str, str] | None = None) -> Any:
     }
     if headers:
         request_headers.update(headers)
+
     request = urllib.request.Request(url, headers=request_headers)
     try:
         with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
@@ -56,199 +81,19 @@ def fetch_json(url: str, headers: dict[str, str] | None = None) -> Any:
         raise ApiError("request timed out") from exc
 
 
-def parse_lat_lon(value: str) -> tuple[float, float] | None:
-    parts = [part.strip() for part in value.split(",")]
-    if len(parts) != 2:
-        return None
-    try:
-        lat = float(parts[0])
-        lon = float(parts[1])
-    except ValueError:
-        return None
-    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
-        return None
-    return lat, lon
-
-
-def geocode_address(query: str) -> Location:
-    parsed = parse_lat_lon(query)
-    if parsed:
-        lat, lon = parsed
-        return Location(
-            query=query,
-            display_name=f"Coordinates {lat:.4f}, {lon:.4f}",
-            latitude=lat,
-            longitude=lon,
-        )
-
-    open_meteo_location = geocode_with_open_meteo(query)
-    if open_meteo_location:
-        return open_meteo_location
-
-    nominatim_location = geocode_with_nominatim(query)
-    if nominatim_location:
-        return nominatim_location
-
-    raise ApiError("address could not be geocoded")
-
-
-def geocode_with_open_meteo(query: str) -> Location | None:
-    for candidate in geocode_query_candidates(query):
-        encoded = urllib.parse.urlencode(
-            {
-                "name": candidate,
-                "count": 1,
-                "language": "ko",
-                "format": "json",
-            }
-        )
-        try:
-            payload = fetch_json(f"https://geocoding-api.open-meteo.com/v1/search?{encoded}")
-        except ApiError:
-            continue
-
-        results = payload.get("results") or []
-        if not results:
-            continue
-
-        match = results[0]
-        name_parts = [match.get("name"), match.get("admin1"), match.get("country")]
-        display_name = ", ".join(part for part in name_parts if part)
-        return Location(
-            query=query,
-            display_name=display_name or candidate,
-            latitude=float(match["latitude"]),
-            longitude=float(match["longitude"]),
-        )
-
-    return None
-
-
-def geocode_with_nominatim(query: str) -> Location | None:
-    encoded = urllib.parse.urlencode(
-        {
-            "q": query,
-            "format": "jsonv2",
-            "limit": 1,
-            "addressdetails": 1,
-        }
-    )
-    try:
-        payload = fetch_json(f"https://nominatim.openstreetmap.org/search?{encoded}")
-    except ApiError:
-        return None
-
-    if not payload:
-        return None
-
-    match = payload[0]
-    return Location(
-        query=query,
-        display_name=match["display_name"],
-        latitude=float(match["lat"]),
-        longitude=float(match["lon"]),
-    )
-
-
-def geocode_query_candidates(query: str) -> list[str]:
-    compact = " ".join(query.split())
-    if not compact:
-        return []
-
-    province_aliases = {
-        "경기": "경기도",
-        "서울": "서울특별시",
-        "부산": "부산광역시",
-        "대구": "대구광역시",
-        "인천": "인천광역시",
-        "광주": "광주광역시",
-        "대전": "대전광역시",
-        "울산": "울산광역시",
-        "세종": "세종특별자치시",
-        "강원": "강원특별자치도",
-        "충북": "충청북도",
-        "충남": "충청남도",
-        "전북": "전북특별자치도",
-        "전남": "전라남도",
-        "경북": "경상북도",
-        "경남": "경상남도",
-        "제주": "제주특별자치도",
-    }
-
-    candidates: list[str] = [compact]
-    normalized = normalize_korean_address(compact)
-    if normalized != compact:
-        candidates.append(normalized)
-
-    parts = compact.split(" ")
-    if parts and parts[0] in province_aliases:
-        expanded = " ".join([province_aliases[parts[0]], *parts[1:]])
-        candidates.append(expanded)
-        expanded_normalized = normalize_korean_address(expanded)
-        if expanded_normalized != expanded:
-            candidates.append(expanded_normalized)
-
-    for base in list(candidates):
-        base_parts = base.split(" ")
-        for end in range(len(base_parts) - 1, 1, -1):
-            shortened = " ".join(base_parts[:end])
-            candidates.append(shortened)
-
-    deduped: list[str] = []
-    seen: set[str] = set()
-    for candidate in candidates:
-        if candidate not in seen:
-            deduped.append(candidate)
-            seen.add(candidate)
-    return deduped
-
-
-def normalize_korean_address(value: str) -> str:
-    normalized = value
-    normalized = re.sub(r"([가-힣A-Za-z])(\d)", r"\1 \2", normalized)
-    normalized = re.sub(r"(\d)([가-힣A-Za-z])", r"\1 \2", normalized)
-    normalized = " ".join(normalized.split())
-    return normalized
-
-
 def format_number(value: float | None) -> str | None:
     if value is None or math.isnan(value):
         return None
     return f"{value:.1f}"
 
 
-def normalize_condition_from_wmo(code: int | None) -> str | None:
-    mapping = {
-        0: "Clear",
-        1: "Mostly clear",
-        2: "Partly cloudy",
-        3: "Overcast",
-        45: "Fog",
-        48: "Rime fog",
-        51: "Light drizzle",
-        53: "Drizzle",
-        55: "Dense drizzle",
-        56: "Freezing drizzle",
-        57: "Dense freezing drizzle",
-        61: "Light rain",
-        63: "Rain",
-        65: "Heavy rain",
-        66: "Freezing rain",
-        67: "Heavy freezing rain",
-        71: "Light snow",
-        73: "Snow",
-        75: "Heavy snow",
-        77: "Snow grains",
-        80: "Rain showers",
-        81: "Heavy rain showers",
-        82: "Violent rain showers",
-        85: "Snow showers",
-        86: "Heavy snow showers",
-        95: "Thunderstorm",
-        96: "Thunderstorm with hail",
-        99: "Severe thunderstorm with hail",
-    }
-    return mapping.get(code, "Unknown")
+def coerce_float(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def summarize_window(values: list[float | None]) -> float | None:
@@ -270,6 +115,33 @@ def numeric_spread(values: list[float | None]) -> float | None:
     return max(numeric) - min(numeric)
 
 
+def normalize_condition_from_wmo(code: int | None) -> str | None:
+    mapping = {
+        0: "Clear",
+        1: "Mostly clear",
+        2: "Partly cloudy",
+        3: "Overcast",
+        45: "Fog",
+        48: "Rime fog",
+        51: "Light drizzle",
+        53: "Drizzle",
+        55: "Dense drizzle",
+        61: "Light rain",
+        63: "Rain",
+        65: "Heavy rain",
+        71: "Light snow",
+        73: "Snow",
+        75: "Heavy snow",
+        80: "Rain showers",
+        81: "Heavy rain showers",
+        82: "Violent rain showers",
+        95: "Thunderstorm",
+        96: "Thunderstorm with hail",
+        99: "Severe thunderstorm with hail",
+    }
+    return mapping.get(code, "Unknown")
+
+
 def timeline_entry(
     time_value: str | None,
     temperature_c: float | None = None,
@@ -282,15 +154,6 @@ def timeline_entry(
         "precip_probability": format_number(precip_probability),
         "condition": condition,
     }
-
-
-def coerce_float(value: Any) -> float | None:
-    if value in (None, ""):
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
 
 
 def sample_every_n_rows(rows: list[dict[str, Any]], target_count: int = TIMELINE_POINT_COUNT) -> list[dict[str, Any]]:
@@ -327,6 +190,7 @@ def open_meteo_forecast(location: Location) -> dict[str, Any]:
         )
         for index in range(min(len(times), 24))
     ]
+
     low, high = summarize_temperature([coerce_float(value) for value in temperatures])
     precip = summarize_window([coerce_float(value) for value in precip_probabilities[:6]])
     current = payload.get("current", {})
@@ -353,12 +217,12 @@ def met_norway_forecast(location: Location) -> dict[str, Any]:
     timeseries = payload["properties"]["timeseries"]
     current = timeseries[0]
     next_day = timeseries[:24]
-
-    temps = [
+    temperatures = [
         coerce_float(entry["data"]["instant"]["details"].get("air_temperature"))
         for entry in next_day
     ]
-    low, high = summarize_temperature(temps)
+    low, high = summarize_temperature(temperatures)
+
     precip_candidates: list[float | None] = []
     timeline_rows = []
     for entry in next_day:
@@ -407,6 +271,7 @@ def wttr_forecast(location: Location) -> dict[str, Any]:
     payload = fetch_json(url)
     current = payload.get("current_condition", [{}])[0]
     weather_days = payload.get("weather", [])[:2]
+
     hourly_rows: list[dict[str, Any]] = []
     precip_candidates: list[float | None] = []
     daily_min_temps: list[float | None] = []
@@ -464,9 +329,7 @@ PROVIDERS = [
 
 def build_consensus(providers: list[dict[str, Any]]) -> dict[str, Any]:
     successful = [provider for provider in providers if not provider.get("error")]
-    current_spread = numeric_spread(
-        [coerce_float(provider.get("current_temp_c")) for provider in successful]
-    )
+    current_spread = numeric_spread([coerce_float(provider.get("current_temp_c")) for provider in successful])
     precip_spread = numeric_spread(
         [coerce_float(provider.get("next_6h_precip_probability")) for provider in successful]
     )
@@ -504,19 +367,14 @@ def build_consensus(providers: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def collect_forecasts(address: str) -> dict[str, Any]:
-    location = geocode_address(address)
+def collect_fixed_location_forecasts() -> dict[str, Any]:
+    location = configured_location()
     providers = []
     for provider_name, provider in PROVIDERS:
         try:
             providers.append(provider(location))
         except Exception as exc:
-            providers.append(
-                {
-                    "provider": provider_name,
-                    "error": str(exc),
-                }
-            )
+            providers.append({"provider": provider_name, "error": str(exc)})
 
     return {
         "location": {

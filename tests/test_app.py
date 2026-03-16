@@ -1,27 +1,43 @@
+import os
 import unittest
 
 import weather_core as app
 
 
-class ParseLatLonTests(unittest.TestCase):
-    def test_accepts_valid_coordinates(self) -> None:
-        self.assertEqual(app.parse_lat_lon("37.5665,126.9780"), (37.5665, 126.978))
+class FixedLocationTests(unittest.TestCase):
+    def test_configured_location_uses_environment_coordinates(self) -> None:
+        original_lat = os.environ.get("WEATHERCHECK_LATITUDE")
+        original_lon = os.environ.get("WEATHERCHECK_LONGITUDE")
+        try:
+            os.environ["WEATHERCHECK_LATITUDE"] = "37.1234"
+            os.environ["WEATHERCHECK_LONGITUDE"] = "127.5678"
+            location = app.configured_location()
+            self.assertEqual(location.display_name, app.FIXED_LOCATION_LABEL)
+            self.assertEqual(location.latitude, 37.1234)
+            self.assertEqual(location.longitude, 127.5678)
+        finally:
+            if original_lat is None:
+                os.environ.pop("WEATHERCHECK_LATITUDE", None)
+            else:
+                os.environ["WEATHERCHECK_LATITUDE"] = original_lat
+            if original_lon is None:
+                os.environ.pop("WEATHERCHECK_LONGITUDE", None)
+            else:
+                os.environ["WEATHERCHECK_LONGITUDE"] = original_lon
 
-    def test_rejects_invalid_coordinates(self) -> None:
-        self.assertIsNone(app.parse_lat_lon("200,100"))
-
-    def test_geocode_query_candidates_broaden_korean_address(self) -> None:
-        candidates = app.geocode_query_candidates("경기 연천군 장남면 장백로278번길 4")
-        self.assertEqual(candidates[0], "경기 연천군 장남면 장백로278번길 4")
-        self.assertIn("경기 연천군 장남면 장백로 278 번길 4", candidates)
-        self.assertIn("경기도 연천군 장남면 장백로278번길 4", candidates)
-        self.assertIn("경기 연천군 장남면", candidates)
-
-    def test_normalize_korean_address_inserts_spaces_between_road_and_numbers(self) -> None:
-        self.assertEqual(
-            app.normalize_korean_address("경기 연천군 장남면 장백로278번길 4"),
-            "경기 연천군 장남면 장백로 278 번길 4",
-        )
+    def test_configured_location_requires_coordinates(self) -> None:
+        original_lat = os.environ.get("WEATHERCHECK_LATITUDE")
+        original_lon = os.environ.get("WEATHERCHECK_LONGITUDE")
+        try:
+            os.environ.pop("WEATHERCHECK_LATITUDE", None)
+            os.environ.pop("WEATHERCHECK_LONGITUDE", None)
+            with self.assertRaises(app.ApiError):
+                app.configured_location()
+        finally:
+            if original_lat is not None:
+                os.environ["WEATHERCHECK_LATITUDE"] = original_lat
+            if original_lon is not None:
+                os.environ["WEATHERCHECK_LONGITUDE"] = original_lon
 
 
 class HelpersTests(unittest.TestCase):

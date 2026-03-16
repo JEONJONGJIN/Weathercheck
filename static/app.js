@@ -1,12 +1,10 @@
-const form = document.querySelector("#search-form");
-const addressInput = document.querySelector("#address");
 const statusBox = document.querySelector("#status");
 const resultSection = document.querySelector("#result");
 const tableBody = document.querySelector("#forecast-table");
 const locationName = document.querySelector("#location-name");
 const latitude = document.querySelector("#latitude");
 const longitude = document.querySelector("#longitude");
-const exampleButtons = document.querySelectorAll(".chip");
+const refreshButton = document.querySelector("#refresh-button");
 const metricProviderCount = document.querySelector("#metric-provider-count");
 const metricCurrentSpread = document.querySelector("#metric-current-spread");
 const metricPrecipSpread = document.querySelector("#metric-precip-spread");
@@ -121,19 +119,15 @@ function renderTimelineRows(providers, consensus) {
   });
 
   const spreadCells = (consensus.timeline || [])
-    .map((entry) => {
-      const tempSpread = formatCell(entry.temperature_spread_c, "°C");
-      const precipSpread = formatCell(entry.precip_spread_probability, "%");
-      return `
-        <td class="spread-cell">
-          <div class="timeline-cell">
-            <strong>${tempSpread}</strong>
-            <span>${precipSpread}</span>
-            <span class="mini-note">편차</span>
-          </div>
-        </td>
-      `;
-    })
+    .map((entry) => `
+      <td class="spread-cell">
+        <div class="timeline-cell">
+          <strong>${formatCell(entry.temperature_spread_c, "°C")}</strong>
+          <span>${formatCell(entry.precip_spread_probability, "%")}</span>
+          <span class="mini-note">편차</span>
+        </div>
+      </td>
+    `)
     .join("");
 
   providerRows.push(`
@@ -152,7 +146,7 @@ function renderMetrics(consensus) {
   metricPrecipSpread.textContent = formatCell(consensus.next_6h_precip_spread_probability, "%");
 }
 
-async function loadForecast(address) {
+async function loadForecast() {
   statusBox.textContent = "무료 API들을 조회하는 중입니다...";
   resultSection.classList.add("hidden");
   tableBody.innerHTML = "";
@@ -160,7 +154,7 @@ async function loadForecast(address) {
   timelineBody.innerHTML = "";
 
   try {
-    const response = await fetch(`/api/forecast?address=${encodeURIComponent(address)}`);
+    const response = await fetch("/api/forecast");
     const payload = await response.json();
     if (!response.ok) {
       throw new Error(payload.error || "조회에 실패했습니다.");
@@ -180,14 +174,8 @@ async function loadForecast(address) {
   }
 }
 
-form.addEventListener("submit", (event) => {
-  event.preventDefault();
-  loadForecast(addressInput.value.trim());
+refreshButton.addEventListener("click", () => {
+  loadForecast();
 });
 
-for (const button of exampleButtons) {
-  button.addEventListener("click", () => {
-    addressInput.value = button.dataset.address || "";
-    loadForecast(addressInput.value);
-  });
-}
+loadForecast();
