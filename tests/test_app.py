@@ -13,8 +13,15 @@ class ParseLatLonTests(unittest.TestCase):
     def test_geocode_query_candidates_broaden_korean_address(self) -> None:
         candidates = app.geocode_query_candidates("경기 연천군 장남면 장백로278번길 4")
         self.assertEqual(candidates[0], "경기 연천군 장남면 장백로278번길 4")
+        self.assertIn("경기 연천군 장남면 장백로 278 번길 4", candidates)
         self.assertIn("경기도 연천군 장남면 장백로278번길 4", candidates)
         self.assertIn("경기 연천군 장남면", candidates)
+
+    def test_normalize_korean_address_inserts_spaces_between_road_and_numbers(self) -> None:
+        self.assertEqual(
+            app.normalize_korean_address("경기 연천군 장남면 장백로278번길 4"),
+            "경기 연천군 장남면 장백로 278 번길 4",
+        )
 
 
 class HelpersTests(unittest.TestCase):

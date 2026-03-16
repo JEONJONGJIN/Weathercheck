@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -175,10 +176,17 @@ def geocode_query_candidates(query: str) -> list[str]:
     }
 
     candidates: list[str] = [compact]
+    normalized = normalize_korean_address(compact)
+    if normalized != compact:
+        candidates.append(normalized)
+
     parts = compact.split(" ")
     if parts and parts[0] in province_aliases:
         expanded = " ".join([province_aliases[parts[0]], *parts[1:]])
         candidates.append(expanded)
+        expanded_normalized = normalize_korean_address(expanded)
+        if expanded_normalized != expanded:
+            candidates.append(expanded_normalized)
 
     for base in list(candidates):
         base_parts = base.split(" ")
@@ -193,6 +201,14 @@ def geocode_query_candidates(query: str) -> list[str]:
             deduped.append(candidate)
             seen.add(candidate)
     return deduped
+
+
+def normalize_korean_address(value: str) -> str:
+    normalized = value
+    normalized = re.sub(r"([가-힣A-Za-z])(\d)", r"\1 \2", normalized)
+    normalized = re.sub(r"(\d)([가-힣A-Za-z])", r"\1 \2", normalized)
+    normalized = " ".join(normalized.split())
+    return normalized
 
 
 def format_number(value: float | None) -> str | None:
