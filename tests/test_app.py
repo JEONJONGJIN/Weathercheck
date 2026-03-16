@@ -86,13 +86,13 @@ class HelpersTests(unittest.TestCase):
     def test_future_timeline_rows_filters_past_entries(self) -> None:
         now = datetime(2026, 3, 16, 10, 30, tzinfo=app.KST)
         rows = [
-            {"time": "2026-03-16T09:00:00+09:00", "temperature_c": "1.0", "precip_probability": "0.0"},
-            {"time": "2026-03-16T11:00:00+09:00", "temperature_c": "2.0", "precip_probability": "10.0"},
-            {"time": "2026-03-16T12:00:00+09:00", "temperature_c": "3.0", "precip_probability": "20.0"},
+            {"time": "2026-03-16T09:00", "temperature_c": "1.0", "precip_probability": "0.0"},
+            {"time": "2026-03-16T11:00", "temperature_c": "2.0", "precip_probability": "10.0"},
+            {"time": "2026-03-16T12:00", "temperature_c": "3.0", "precip_probability": "20.0"},
         ]
         filtered = app.future_timeline_rows(rows, now=now)
         self.assertEqual(len(filtered), 2)
-        self.assertEqual(filtered[0]["time"], "2026-03-16T11:00:00+09:00")
+        self.assertEqual(filtered[0]["time"], "2026-03-16T11:00")
 
 
 class ConsensusTests(unittest.TestCase):

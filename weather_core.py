@@ -290,11 +290,9 @@ def parse_forecast_datetime(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
-        if len(value) >= 19 and value[4] == "-" and value[7] == "-":
+        if "T" in value:
             parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
             return parsed if parsed.tzinfo else parsed.replace(tzinfo=KST)
-        if len(value) == 19 and value[8] == "T":
-            return datetime.fromisoformat(value).replace(tzinfo=KST)
     except ValueError:
         return None
     return None
@@ -302,7 +300,11 @@ def parse_forecast_datetime(value: str | None) -> datetime | None:
 
 def future_timeline_rows(rows: list[dict[str, Any]], now: datetime | None = None, hours: int = 24) -> list[dict[str, Any]]:
     current = now.astimezone(KST) if now else datetime.now(KST)
-    filtered = [row for row in rows if (parse_forecast_datetime(row.get("time")) or current) >= current]
+    filtered = []
+    for row in rows:
+        row_time = parse_forecast_datetime(row.get("time"))
+        if row_time is None or row_time >= current:
+            filtered.append(row)
     return filtered[:hours]
 
 
@@ -430,7 +432,7 @@ def open_meteo_forecast(location: Location) -> dict[str, Any]:
             "latitude": location.latitude,
             "longitude": location.longitude,
             "current": "temperature_2m,apparent_temperature,weather_code",
-            "hourly": "temperature_2m,precipitation_probability,weather_code",
+            "hourly": "temperature_2m,precipitation_probability,weather_code,precipitation,wind_speed_10m,wind_direction_10m",
             "timezone": "auto",
             "forecast_days": 2,
         }
@@ -440,6 +442,9 @@ def open_meteo_forecast(location: Location) -> dict[str, Any]:
     times = hourly.get("time", [])[:24]
     temperatures = hourly.get("temperature_2m", [])[:24]
     precip_probabilities = hourly.get("precipitation_probability", [])[:24]
+    precipitation_amounts = hourly.get("precipitation", [])[:24]
+    wind_speeds = hourly.get("wind_speed_10m", [])[:24]
+    wind_directions = hourly.get("wind_direction_10m", [])[:24]
     weather_codes = hourly.get("weather_code", [])[:24]
 
     timeline_rows = [
@@ -457,6 +462,8 @@ def open_meteo_forecast(location: Location) -> dict[str, Any]:
     low, high = summarize_temperature([coerce_float(row.get("temperature_c")) for row in upcoming_rows])
     precip = summarize_window([coerce_float(row.get("precip_probability")) for row in upcoming_rows[:6]])
     current = payload.get("current", {})
+    first_upcoming = upcoming_rows[0] if upcoming_rows else None
+    first_index = timeline_rows.index(first_upcoming) if first_upcoming in timeline_rows else 0
     return {
         "provider": "Open-Meteo",
         "source_url": "https://open-meteo.com/",
@@ -469,6 +476,10 @@ def open_meteo_forecast(location: Location) -> dict[str, Any]:
         "forecast_time": current.get("time"),
         "time_label": "예보 시각",
         "timeline": sample_every_n_rows(upcoming_rows),
+        "wind_speed_ms": format_number(coerce_float(wind_speeds[first_index])) if first_index < len(wind_speeds) else None,
+        "wind_direction_angle": format_number(coerce_float(wind_directions[first_index])) if first_index < len(wind_directions) else None,
+        "wind_direction": wind_direction_text(wind_directions[first_index]) if first_index < len(wind_directions) else None,
+        "precipitation_amount_mm": format_number(coerce_float(precipitation_amounts[first_index])) if first_index < len(precipitation_amounts) else None,
     }
 
 
@@ -652,7 +663,11 @@ def kma_short_forecast(location: Location) -> dict[str, Any]:
         "timeline": sample_every_n_rows(upcoming_rows),
         "humidity": first_bucket.get("REH"),
         "wind_speed_ms": first_bucket.get("WSD"),
+        "wind_direction_angle": format_number(coerce_float(first_bucket.get("VEC"))),
         "wind_direction": wind_direction_text(first_bucket.get("VEC")),
+        "precipitation_type": kma_pty_text(first_bucket.get("PTY")),
+        "precipitation_amount_mm": None if first_bucket.get("PCP") in (None, "", "강수없음") else first_bucket.get("PCP"),
+        "snow_amount_cm": None if first_bucket.get("SNO") in (None, "", "적설없음") else first_bucket.get("SNO"),
     }
 
 

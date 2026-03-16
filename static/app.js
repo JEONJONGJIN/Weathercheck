@@ -85,13 +85,21 @@ function renderProvider(provider) {
       <td>${formatCell(provider.feels_like_c, "°C")}</td>
       <td>
         ${formatCell(provider.condition)}
-        ${provider.humidity || provider.wind_speed_ms || provider.wind_direction ? `
+        ${provider.humidity || provider.wind_speed_ms || provider.wind_direction || provider.wind_direction_angle || provider.precipitation_type || provider.precipitation_amount_mm || provider.snow_amount_cm ? `
           <div class="provider-subline">
             ${provider.humidity ? `습도 ${provider.humidity}%` : ""}
-            ${provider.humidity && (provider.wind_speed_ms || provider.wind_direction) ? " / " : ""}
+            ${provider.humidity && (provider.wind_speed_ms || provider.wind_direction || provider.wind_direction_angle || provider.precipitation_type || provider.precipitation_amount_mm || provider.snow_amount_cm) ? " / " : ""}
             ${provider.wind_speed_ms ? `풍속 ${provider.wind_speed_ms}m/s` : ""}
-            ${provider.wind_speed_ms && provider.wind_direction ? " / " : ""}
+            ${provider.wind_speed_ms && (provider.wind_direction || provider.wind_direction_angle || provider.precipitation_type || provider.precipitation_amount_mm || provider.snow_amount_cm) ? " / " : ""}
             ${provider.wind_direction ? `풍향 ${provider.wind_direction}` : ""}
+            ${provider.wind_direction && (provider.wind_direction_angle || provider.precipitation_type || provider.precipitation_amount_mm || provider.snow_amount_cm) ? " / " : ""}
+            ${provider.wind_direction_angle ? `풍향각 ${provider.wind_direction_angle}°` : ""}
+            ${provider.wind_direction_angle && (provider.precipitation_type || provider.precipitation_amount_mm || provider.snow_amount_cm) ? " / " : ""}
+            ${provider.precipitation_type ? `강수형태 ${provider.precipitation_type}` : ""}
+            ${provider.precipitation_type && (provider.precipitation_amount_mm || provider.snow_amount_cm) ? " / " : ""}
+            ${provider.precipitation_amount_mm ? `강수량 ${provider.precipitation_amount_mm}mm` : ""}
+            ${provider.precipitation_amount_mm && provider.snow_amount_cm ? " / " : ""}
+            ${provider.snow_amount_cm ? `적설 ${provider.snow_amount_cm}cm` : ""}
           </div>
         ` : ""}
       </td>
