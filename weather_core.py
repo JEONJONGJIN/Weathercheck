@@ -903,13 +903,13 @@ def windy_forecast(location: Location) -> dict[str, Any]:
 
 
 def active_providers() -> list[tuple[str, Any]]:
-    providers = [
-        ("Open-Meteo", open_meteo_forecast),
-    ]
-    if data_go_kr_service_key():
-        providers.append(("기상청 단기예보", kma_short_forecast))
+    providers = []
     if windy_api_key():
         providers.append(("Windy", windy_forecast))
+    else:
+        providers.append(("Open-Meteo", open_meteo_forecast))
+    if data_go_kr_service_key():
+        providers.append(("기상청 단기예보", kma_short_forecast))
     return providers
 
 
