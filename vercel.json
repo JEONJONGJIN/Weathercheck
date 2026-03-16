@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/api/forecast", "destination": "/api/forecast.py" }
+  ]
+}

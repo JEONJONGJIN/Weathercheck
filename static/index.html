@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>WeatherCheck</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">WeatherCheck</p>
+        <h1>같은 주소, 다른 예보.</h1>
+        <p class="lede">
+          여러 무료 날씨 API의 답을 같은 주소 기준으로 모아서, 숫자 차이와 시간대별 편차까지 한 화면에서 봅니다.
+        </p>
+      </section>
+
+      <section class="panel">
+        <form id="search-form" class="search-form">
+          <label for="address">주소 또는 좌표</label>
+          <div class="search-row">
+            <input
+              id="address"
+              name="address"
+              type="text"
+              placeholder="예: 서울특별시 강남구 테헤란로 427 또는 37.5665,126.9780"
+              required
+            >
+            <button type="submit">비교하기</button>
+          </div>
+        </form>
+
+        <div class="examples">
+          <button type="button" class="chip" data-address="서울특별시 강남구 테헤란로 427">강남역</button>
+          <button type="button" class="chip" data-address="1600 Amphitheatre Parkway, Mountain View, CA">Mountain View</button>
+          <button type="button" class="chip" data-address="37.5665,126.9780">서울 좌표</button>
+        </div>
+
+        <div id="status" class="status">주소를 입력하면 무료 API 예보를 비교해서 보여줍니다.</div>
+      </section>
+
+      <section id="result" class="result hidden">
+        <div class="location-card">
+          <div>
+            <p class="muted">조회 위치</p>
+            <h2 id="location-name"></h2>
+          </div>
+          <dl class="coords">
+            <div>
+              <dt>위도</dt>
+              <dd id="latitude"></dd>
+            </div>
+            <div>
+              <dt>경도</dt>
+              <dd id="longitude"></dd>
+            </div>
+          </dl>
+        </div>
+
+        <section class="metrics-grid">
+          <article class="metric-card">
+            <p class="metric-label">성공한 소스</p>
+            <p id="metric-provider-count" class="metric-value"></p>
+          </article>
+          <article class="metric-card">
+            <p class="metric-label">현재 기온 편차</p>
+            <p id="metric-current-spread" class="metric-value"></p>
+          </article>
+          <article class="metric-card">
+            <p class="metric-label">6시간 강수 편차</p>
+            <p id="metric-precip-spread" class="metric-value"></p>
+          </article>
+        </section>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Provider</th>
+                <th>현재 기온</th>
+                <th>체감</th>
+                <th>상태</th>
+                <th>6시간 강수 확률</th>
+                <th>24시간 최저</th>
+                <th>24시간 최고</th>
+                <th>시각</th>
+              </tr>
+            </thead>
+            <tbody id="forecast-table"></tbody>
+          </table>
+        </div>
+
+        <section class="timeline-panel">
+          <div class="section-head">
+            <div>
+              <p class="muted">24시간 타임라인</p>
+              <h3>3시간 간격 예보 비교</h3>
+            </div>
+            <p class="section-note">각 셀은 기온과 강수확률을 같이 보여줍니다.</p>
+          </div>
+          <div class="table-wrap">
+            <table id="timeline-table">
+              <thead id="timeline-head"></thead>
+              <tbody id="timeline-body"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+  </html>
