@@ -80,6 +80,47 @@ def geocode_address(query: str) -> Location:
             longitude=lon,
         )
 
+    open_meteo_location = geocode_with_open_meteo(query)
+    if open_meteo_location:
+        return open_meteo_location
+
+    nominatim_location = geocode_with_nominatim(query)
+    if nominatim_location:
+        return nominatim_location
+
+    raise ApiError("address could not be geocoded")
+
+
+def geocode_with_open_meteo(query: str) -> Location | None:
+    encoded = urllib.parse.urlencode(
+        {
+            "name": query,
+            "count": 1,
+            "language": "ko",
+            "format": "json",
+        }
+    )
+    try:
+        payload = fetch_json(f"https://geocoding-api.open-meteo.com/v1/search?{encoded}")
+    except ApiError:
+        return None
+
+    results = payload.get("results") or []
+    if not results:
+        return None
+
+    match = results[0]
+    name_parts = [match.get("name"), match.get("admin1"), match.get("country")]
+    display_name = ", ".join(part for part in name_parts if part)
+    return Location(
+        query=query,
+        display_name=display_name or query,
+        latitude=float(match["latitude"]),
+        longitude=float(match["longitude"]),
+    )
+
+
+def geocode_with_nominatim(query: str) -> Location | None:
     encoded = urllib.parse.urlencode(
         {
             "q": query,
@@ -88,9 +129,13 @@ def geocode_address(query: str) -> Location:
             "addressdetails": 1,
         }
     )
-    payload = fetch_json(f"https://nominatim.openstreetmap.org/search?{encoded}")
+    try:
+        payload = fetch_json(f"https://nominatim.openstreetmap.org/search?{encoded}")
+    except ApiError:
+        return None
+
     if not payload:
-        raise ApiError("address could not be geocoded")
+        return None
 
     match = payload[0]
     return Location(
