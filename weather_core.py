@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import math
 import os
+import ssl
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -70,18 +72,33 @@ def fetch_json(url: str, headers: dict[str, str] | None = None) -> Any:
     }
     if headers:
         request_headers.update(headers)
-
-    request = urllib.request.Request(url, headers=request_headers)
-    try:
-        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
-            charset = response.headers.get_content_charset("utf-8")
-            return json.loads(response.read().decode(charset))
-    except urllib.error.HTTPError as exc:
-        raise ApiError(f"{exc.code} {exc.reason}") from exc
-    except urllib.error.URLError as exc:
-        raise ApiError(str(exc.reason)) from exc
-    except TimeoutError as exc:
-        raise ApiError("request timed out") from exc
+    last_error: Exception | None = None
+    for attempt in range(3):
+        request = urllib.request.Request(url, headers=request_headers)
+        try:
+            with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+                charset = response.headers.get_content_charset("utf-8")
+                return json.loads(response.read().decode(charset))
+        except urllib.error.HTTPError as exc:
+            raise ApiError(f"{exc.code} {exc.reason}") from exc
+        except urllib.error.URLError as exc:
+            last_error = exc
+            reason = str(exc.reason)
+            if "UNEXPECTED_EOF_WHILE_READING" in reason and attempt < 2:
+                time.sleep(0.5 * (attempt + 1))
+                continue
+            raise ApiError(reason) from exc
+        except ssl.SSLError as exc:
+            last_error = exc
+            if attempt < 2:
+                time.sleep(0.5 * (attempt + 1))
+                continue
+            raise ApiError(str(exc)) from exc
+        except TimeoutError as exc:
+            raise ApiError("request timed out") from exc
+    if last_error:
+        raise ApiError(str(last_error))
+    raise ApiError("request failed")
 
 
 def fetch_text(url: str, headers: dict[str, str] | None = None) -> str:
