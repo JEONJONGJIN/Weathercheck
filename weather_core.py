@@ -286,6 +286,26 @@ def sample_every_n_rows(rows: list[dict[str, Any]], target_count: int = TIMELINE
     return rows[::step][:target_count]
 
 
+def parse_forecast_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        if len(value) >= 19 and value[4] == "-" and value[7] == "-":
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=KST)
+        if len(value) == 19 and value[8] == "T":
+            return datetime.fromisoformat(value).replace(tzinfo=KST)
+    except ValueError:
+        return None
+    return None
+
+
+def future_timeline_rows(rows: list[dict[str, Any]], now: datetime | None = None, hours: int = 24) -> list[dict[str, Any]]:
+    current = now.astimezone(KST) if now else datetime.now(KST)
+    filtered = [row for row in rows if (parse_forecast_datetime(row.get("time")) or current) >= current]
+    return filtered[:hours]
+
+
 def kma_grid_from_lat_lon(latitude: float, longitude: float) -> tuple[int, int]:
     re_value = 6371.00877 / 5.0
     grid = math.pi / 180.0
@@ -431,9 +451,11 @@ def open_meteo_forecast(location: Location) -> dict[str, Any]:
         )
         for index in range(min(len(times), 24))
     ]
-
-    low, high = summarize_temperature([coerce_float(value) for value in temperatures])
-    precip = summarize_window([coerce_float(value) for value in precip_probabilities[:6]])
+    upcoming_rows = future_timeline_rows(timeline_rows)
+    if not upcoming_rows:
+        upcoming_rows = timeline_rows
+    low, high = summarize_temperature([coerce_float(row.get("temperature_c")) for row in upcoming_rows])
+    precip = summarize_window([coerce_float(row.get("precip_probability")) for row in upcoming_rows[:6]])
     current = payload.get("current", {})
     return {
         "provider": "Open-Meteo",
@@ -446,7 +468,7 @@ def open_meteo_forecast(location: Location) -> dict[str, Any]:
         "next_24h_high_c": format_number(high),
         "forecast_time": current.get("time"),
         "time_label": "예보 시각",
-        "timeline": sample_every_n_rows(timeline_rows),
+        "timeline": sample_every_n_rows(upcoming_rows),
     }
 
 
@@ -608,11 +630,11 @@ def kma_short_forecast(location: Location) -> dict[str, Any]:
             )
         )
 
-    first_bucket = grouped[ordered_times[0]]
-    min_candidates = [coerce_float(item.get("fcstValue")) for item in items if item.get("category") == "TMN"]
-    max_candidates = [coerce_float(item.get("fcstValue")) for item in items if item.get("category") == "TMX"]
-    min_candidates = [value for value in min_candidates if value is not None]
-    max_candidates = [value for value in max_candidates if value is not None]
+    upcoming_rows = future_timeline_rows(timeline_rows)
+    if not upcoming_rows:
+        upcoming_rows = timeline_rows
+    first_bucket = grouped[upcoming_rows[0]["time"]] if upcoming_rows else grouped[ordered_times[0]]
+    low, high = summarize_temperature([coerce_float(row.get("temperature_c")) for row in upcoming_rows])
 
     return {
         "provider": "기상청 단기예보",
@@ -621,13 +643,13 @@ def kma_short_forecast(location: Location) -> dict[str, Any]:
         "feels_like_c": None,
         "condition": kma_condition_text(first_bucket.get("SKY"), first_bucket.get("PTY")),
         "next_6h_precip_probability": format_number(
-            summarize_window([coerce_float(grouped[key].get("POP")) for key in ordered_times[:6]])
+            summarize_window([coerce_float(row.get("precip_probability")) for row in upcoming_rows[:6]])
         ),
-        "next_24h_low_c": format_number(min(min_candidates)) if min_candidates else None,
-        "next_24h_high_c": format_number(max(max_candidates)) if max_candidates else None,
+        "next_24h_low_c": format_number(low),
+        "next_24h_high_c": format_number(high),
         "forecast_time": f"{base_date[:4]}-{base_date[4:6]}-{base_date[6:8]}T{base_time[:2]}:{base_time[2:]}:00+09:00",
         "time_label": "발표 시각",
-        "timeline": sample_every_n_rows(timeline_rows),
+        "timeline": sample_every_n_rows(upcoming_rows),
         "humidity": first_bucket.get("REH"),
         "wind_speed_ms": first_bucket.get("WSD"),
         "wind_direction": wind_direction_text(first_bucket.get("VEC")),
