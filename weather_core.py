@@ -82,6 +82,30 @@ def fetch_json(url: str, headers: dict[str, str] | None = None) -> Any:
         raise ApiError("request timed out") from exc
 
 
+def fetch_text(url: str, headers: dict[str, str] | None = None) -> str:
+    request_headers = {
+        "User-Agent": USER_AGENT,
+        "Accept": "*/*",
+    }
+    if headers:
+        request_headers.update(headers)
+
+    request = urllib.request.Request(url, headers=request_headers)
+    try:
+        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+            charset = response.headers.get_content_charset("utf-8")
+            return response.read().decode(charset)
+    except urllib.error.HTTPError as exc:
+        charset = exc.headers.get_content_charset("utf-8") if exc.headers else "utf-8"
+        body = exc.read().decode(charset, errors="replace")
+        snippet = " ".join(body.split())[:180]
+        raise ApiError(f"{exc.code} {exc.reason}: {snippet}") from exc
+    except urllib.error.URLError as exc:
+        raise ApiError(str(exc.reason)) from exc
+    except TimeoutError as exc:
+        raise ApiError("request timed out") from exc
+
+
 def data_go_kr_service_key() -> str | None:
     return os.getenv("DATA_GO_KR_SERVICE_KEY") or os.getenv("SERVICE_KEY")
 
@@ -438,16 +462,15 @@ def kma_bulletin_forecast(location: Location) -> dict[str, Any]:
     if not service_key:
         raise ApiError("DATA_GO_KR_SERVICE_KEY is not configured")
 
-    query = urllib.parse.urlencode(
-        {
-            "serviceKey": service_key,
-            "pageNo": 1,
-            "numOfRows": 10,
-            "dataType": "JSON",
-            "stnId": KMA_BULLETIN_STN_ID,
-        }
+    query = (
+        f"serviceKey={service_key}"
+        f"&pageNo=1"
+        f"&numOfRows=10"
+        f"&dataType=JSON"
+        f"&stnId={urllib.parse.quote(str(KMA_BULLETIN_STN_ID), safe='')}"
     )
-    payload = fetch_json(f"https://apis.data.go.kr/1360000/VilageFcstMsgService/getWthrSituation?{query}")
+    raw = fetch_text(f"https://apis.data.go.kr/1360000/VilageFcstMsgService/getWthrSituation?{query}")
+    payload = json.loads(raw)
     body = payload.get("response", {}).get("body", {})
     items = body.get("items", {}).get("item", [])
     if not items:
