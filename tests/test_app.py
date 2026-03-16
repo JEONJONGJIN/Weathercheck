@@ -124,6 +124,12 @@ class HelpersTests(unittest.TestCase):
             else:
                 os.environ["KMA_APIHUB_AUTH_KEY"] = original_apihub_key
 
+    def test_parse_kma_apihub_grid_value_reads_expected_cell(self) -> None:
+        row = ",".join(str(index) for index in range(149))
+        raw_text = ",\n".join([row] * 253)
+        value = app.parse_kma_apihub_grid_value(raw_text, nx=61, ny=133)
+        self.assertEqual(value, 60.0)
+
 
 class ConsensusTests(unittest.TestCase):
     def test_build_consensus_aggregates_summary_and_timeline(self) -> None:

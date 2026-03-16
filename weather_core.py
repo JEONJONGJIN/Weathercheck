@@ -8,6 +8,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -494,6 +495,17 @@ def fetch_kma_apihub_payload(service_path: str, params: dict[str, Any], auth_key
         raise
 
 
+def fetch_kma_apihub_grid_text(params: dict[str, Any], auth_key: str) -> str:
+    query = urllib.parse.urlencode(params)
+    url = f"https://apihub.kma.go.kr/api/typ01/cgi-bin/url/nph-dfs_shrt_grd?{query}&authKey={urllib.parse.quote(auth_key, safe='')}"
+    try:
+        return fetch_text(url)
+    except ApiError as exc:
+        if str(exc).startswith("403"):
+            raise ApiError("API 허브 단기예보 활용신청/승인 또는 authKey 확인 필요") from exc
+        raise
+
+
 def group_kma_forecast_rows(items: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
     grouped: dict[str, dict[str, str]] = {}
     for item in items:
@@ -551,6 +563,40 @@ def build_kma_short_forecast_result(
         "precipitation_amount_mm": None if first_bucket.get("PCP") in (None, "", "강수없음") else first_bucket.get("PCP"),
         "snow_amount_cm": None if first_bucket.get("SNO") in (None, "", "적설없음") else first_bucket.get("SNO"),
     }
+
+
+def parse_kma_apihub_grid_value(raw_text: str, nx: int, ny: int) -> float | None:
+    try:
+        values = [float(value) for value in raw_text.replace("\n", " ").split(",") if value.strip()]
+    except ValueError:
+        return None
+    width = 149
+    index = (ny - 1) * width + (nx - 1)
+    if index < 0 or index >= len(values):
+        return None
+    value = values[index]
+    if value <= -90:
+        return None
+    return value
+
+
+def fetch_kma_apihub_grid_value(
+    auth_key: str,
+    base_datetime: datetime,
+    forecast_datetime: datetime,
+    variable: str,
+    nx: int,
+    ny: int,
+) -> float | None:
+    raw_text = fetch_kma_apihub_grid_text(
+        {
+            "tmfc": base_datetime.strftime("%Y%m%d%H"),
+            "tmef": forecast_datetime.strftime("%Y%m%d%H"),
+            "vars": variable,
+        },
+        auth_key,
+    )
+    return parse_kma_apihub_grid_value(raw_text, nx, ny)
 
 
 def open_meteo_forecast(location: Location) -> dict[str, Any]:
@@ -812,33 +858,53 @@ def kma_apihub_short_forecast(location: Location) -> dict[str, Any]:
 
     nx, ny = kma_grid_from_lat_lon(location.latitude, location.longitude)
     base_date, base_time = latest_kma_base_datetime()
-    payload = fetch_kma_apihub_payload(
-        "/VilageFcstInfoService_2.0/getVilageFcst",
-        {
-            "pageNo": 1,
-            "numOfRows": 1000,
-            "dataType": "JSON",
-            "base_date": base_date,
-            "base_time": base_time,
-            "nx": nx,
-            "ny": ny,
-        },
-        auth_key,
-    )
+    base_datetime = datetime.strptime(f"{base_date}{base_time[:2]}", "%Y%m%d%H").replace(tzinfo=KST)
+    forecast_times = [base_datetime + timedelta(hours=offset) for offset in range(1, 25, 3)]
 
-    response = payload.get("response", {})
-    header = response.get("header", {})
-    if header.get("resultCode") not in (None, "00"):
-        raise ApiError(f"{header.get('resultCode')} {header.get('resultMsg')}")
+    grouped: dict[str, dict[str, str]] = {}
+    variable_map = {
+        "TMP": "TMP",
+        "POP": "POP",
+        "SKY": "SKY",
+        "PTY": "PTY",
+        "WSD": "WSD",
+        "PCP": "PCP",
+    }
+    futures = {}
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        for forecast_datetime in forecast_times:
+            time_key = forecast_datetime.strftime("%Y-%m-%dT%H:00:00+09:00")
+            grouped[time_key] = {}
+            for category, variable in variable_map.items():
+                future = executor.submit(
+                    fetch_kma_apihub_grid_value,
+                    auth_key,
+                    base_datetime,
+                    forecast_datetime,
+                    variable,
+                    nx,
+                    ny,
+                )
+                futures[future] = (time_key, category)
 
-    items = response.get("body", {}).get("items", {}).get("item", [])
-    if not items:
-        raise ApiError("KMA API Hub short forecast returned no items")
+        for future in as_completed(futures):
+            time_key, category = futures[future]
+            try:
+                value = future.result()
+            except ApiError:
+                continue
+            if value is None:
+                continue
+            if category in {"SKY", "PTY"}:
+                grouped[time_key][category] = str(int(round(value)))
+            else:
+                grouped[time_key][category] = f"{value:.1f}"
 
-    grouped = group_kma_forecast_rows(items)
     ordered_times = sorted(grouped.keys())
+    if not any(grouped[time_key] for time_key in ordered_times):
+        raise ApiError("API 허브 단기예보 응답이 지연되거나 비어 있습니다")
     timeline_rows = []
-    for forecast_time in ordered_times[:24]:
+    for forecast_time in ordered_times:
         bucket = grouped[forecast_time]
         timeline_rows.append(
             timeline_entry(
@@ -849,12 +915,8 @@ def kma_apihub_short_forecast(location: Location) -> dict[str, Any]:
             )
         )
 
-    upcoming_rows = future_timeline_rows(timeline_rows)
-    if not upcoming_rows:
-        upcoming_rows = timeline_rows
-    first_bucket = grouped[upcoming_rows[0]["time"]] if upcoming_rows else grouped[ordered_times[0]]
-    low, high = summarize_temperature([coerce_float(row.get("temperature_c")) for row in upcoming_rows])
-
+    low, high = summarize_temperature([coerce_float(row.get("temperature_c")) for row in timeline_rows])
+    first_bucket = grouped[ordered_times[0]]
     return {
         "provider": "기상청 단기예보(API 허브)",
         "source_url": "https://apihub.kma.go.kr/apiList.do?seqApi=10",
@@ -862,20 +924,15 @@ def kma_apihub_short_forecast(location: Location) -> dict[str, Any]:
         "feels_like_c": None,
         "condition": kma_condition_text(first_bucket.get("SKY"), first_bucket.get("PTY")),
         "next_6h_precip_probability": format_number(
-            summarize_window([coerce_float(row.get("precip_probability")) for row in upcoming_rows[:6]])
+            summarize_window([coerce_float(grouped[time_key].get("POP")) for time_key in ordered_times[:2]])
         ),
         "next_24h_low_c": format_number(low),
         "next_24h_high_c": format_number(high),
         "forecast_time": f"{base_date[:4]}-{base_date[4:6]}-{base_date[6:8]}T{base_time[:2]}:{base_time[2:]}:00+09:00",
         "time_label": "발표 시각",
-        "timeline": sample_every_3_hours(upcoming_rows),
-        "humidity": first_bucket.get("REH"),
+        "timeline": timeline_rows,
         "wind_speed_ms": first_bucket.get("WSD"),
-        "wind_direction_angle": format_number(coerce_float(first_bucket.get("VEC"))),
-        "wind_direction": wind_direction_text(first_bucket.get("VEC")),
-        "precipitation_type": kma_pty_text(first_bucket.get("PTY")),
         "precipitation_amount_mm": None if first_bucket.get("PCP") in (None, "", "강수없음") else first_bucket.get("PCP"),
-        "snow_amount_cm": None if first_bucket.get("SNO") in (None, "", "적설없음") else first_bucket.get("SNO"),
     }
 
 
