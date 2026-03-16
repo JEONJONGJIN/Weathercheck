@@ -177,5 +177,3 @@ async function loadForecast() {
 refreshButton.addEventListener("click", () => {
   loadForecast();
 });
-
-loadForecast();
