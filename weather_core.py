@@ -134,6 +134,10 @@ def windy_api_key() -> str | None:
     return os.getenv("WINDY_API_KEY")
 
 
+def openweather_api_key() -> str | None:
+    return os.getenv("OPENWEATHER_API_KEY")
+
+
 def kma_apihub_auth_key() -> str | None:
     return os.getenv("KMA_APIHUB_AUTH_KEY")
 
@@ -656,6 +660,87 @@ def open_meteo_forecast(location: Location) -> dict[str, Any]:
     }
 
 
+def openweather_forecast(location: Location) -> dict[str, Any]:
+    api_key = openweather_api_key()
+    if not api_key:
+        raise ApiError("OPENWEATHER_API_KEY is not configured")
+
+    current_query = urllib.parse.urlencode(
+        {
+            "lat": location.latitude,
+            "lon": location.longitude,
+            "appid": api_key,
+            "units": "metric",
+        }
+    )
+    forecast_query = urllib.parse.urlencode(
+        {
+            "lat": location.latitude,
+            "lon": location.longitude,
+            "appid": api_key,
+            "units": "metric",
+            "cnt": 16,
+        }
+    )
+    try:
+        current = fetch_json(f"https://api.openweathermap.org/data/2.5/weather?{current_query}")
+        forecast = fetch_json(f"https://api.openweathermap.org/data/2.5/forecast?{forecast_query}")
+    except ApiError as exc:
+        if str(exc).startswith("401"):
+            raise ApiError("OpenWeather API key가 아직 활성화되지 않았거나 잘못되었습니다") from exc
+        raise
+    forecast_list = forecast.get("list", [])[:16]
+
+    timeline_rows = []
+    for entry in forecast_list:
+        weather = (entry.get("weather") or [{}])[0]
+        condition = (
+            translate_condition_text(weather.get("description"))
+            or translate_condition_text(weather.get("main"))
+        )
+        timeline_rows.append(
+            timeline_entry(
+                time_value=datetime.fromtimestamp(entry.get("dt", 0), tz=timezone.utc).astimezone(KST).isoformat(),
+                temperature_c=coerce_float(entry.get("main", {}).get("temp")),
+                precip_probability=(coerce_float(entry.get("pop")) or 0.0) * 100.0,
+                condition=condition,
+            )
+        )
+
+    upcoming_rows = future_timeline_rows(timeline_rows)
+    if not upcoming_rows:
+        upcoming_rows = timeline_rows
+
+    low, high = summarize_temperature([coerce_float(row.get("temperature_c")) for row in upcoming_rows])
+    current_weather = (current.get("weather") or [{}])[0]
+    current_condition = (
+        translate_condition_text(current_weather.get("description"))
+        or translate_condition_text(current_weather.get("main"))
+    )
+    next_slot = forecast_list[0] if forecast_list else {}
+    next_precip_amount = coerce_float(next_slot.get("rain", {}).get("3h"))
+    if next_precip_amount is None:
+        next_precip_amount = coerce_float(next_slot.get("snow", {}).get("3h"))
+
+    return {
+        "provider": "OpenWeather",
+        "source_url": "https://openweathermap.org/forecast5",
+        "current_temp_c": format_number(coerce_float(current.get("main", {}).get("temp"))),
+        "feels_like_c": format_number(coerce_float(current.get("main", {}).get("feels_like"))),
+        "condition": current_condition,
+        "next_6h_precip_probability": format_number(
+            summarize_window([coerce_float(row.get("precip_probability")) for row in upcoming_rows[:2]])
+        ),
+        "next_24h_low_c": format_number(low),
+        "next_24h_high_c": format_number(high),
+        "forecast_time": datetime.fromtimestamp(current.get("dt", 0), tz=timezone.utc).astimezone(KST).isoformat() if current.get("dt") else None,
+        "time_label": "예보 시각",
+        "timeline": sample_every_3_hours(upcoming_rows),
+        "wind_speed_ms": format_number(coerce_float(current.get("wind", {}).get("speed"))),
+        "precipitation_amount_mm": format_number(next_precip_amount),
+    }
+
+
 def met_norway_forecast(location: Location) -> dict[str, Any]:
     query = urllib.parse.urlencode({"lat": location.latitude, "lon": location.longitude})
     payload = fetch_json(
@@ -1121,6 +1206,8 @@ def active_providers_for_app() -> list[tuple[str, Any]]:
         providers.append(("Windy", windy_forecast))
     else:
         providers.append(("Open-Meteo", open_meteo_forecast))
+    if openweather_api_key():
+        providers.append(("OpenWeather", openweather_forecast))
     if data_go_kr_service_key():
         providers.append(("기상청 단기예보(data.go.kr)", kma_short_forecast_data_go))
     if kma_apihub_auth_key():
