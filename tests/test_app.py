@@ -57,6 +57,12 @@ class HelpersTests(unittest.TestCase):
         sampled = app.sample_every_n_rows(rows, target_count=8)
         self.assertEqual(len(sampled), 8)
 
+    def test_sample_every_3_hours_keeps_three_hour_spacing(self) -> None:
+        rows = [{"time": str(index)} for index in range(24)]
+        sampled = app.sample_every_3_hours(rows, target_count=8)
+        self.assertEqual(len(sampled), 8)
+        self.assertEqual(sampled[1]["time"], "3")
+
     def test_translate_condition_text_returns_korean(self) -> None:
         self.assertEqual(app.translate_condition_text("Patchy rain nearby"), "주변에 비 가능성")
         self.assertEqual(app.translate_condition_text("Heavy snow"), "강한 눈")

@@ -286,6 +286,13 @@ def sample_every_n_rows(rows: list[dict[str, Any]], target_count: int = TIMELINE
     return rows[::step][:target_count]
 
 
+def sample_every_3_hours(rows: list[dict[str, Any]], target_count: int = TIMELINE_POINT_COUNT) -> list[dict[str, Any]]:
+    if not rows:
+        return rows
+    sampled = rows[::3]
+    return sampled[:target_count]
+
+
 def parse_forecast_datetime(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -475,7 +482,7 @@ def open_meteo_forecast(location: Location) -> dict[str, Any]:
         "next_24h_high_c": format_number(high),
         "forecast_time": current.get("time"),
         "time_label": "예보 시각",
-        "timeline": sample_every_n_rows(upcoming_rows),
+        "timeline": sample_every_3_hours(upcoming_rows),
         "wind_speed_ms": format_number(coerce_float(wind_speeds[first_index])) if first_index < len(wind_speeds) else None,
         "wind_direction_angle": format_number(coerce_float(wind_directions[first_index])) if first_index < len(wind_directions) else None,
         "wind_direction": wind_direction_text(wind_directions[first_index]) if first_index < len(wind_directions) else None,
@@ -660,7 +667,7 @@ def kma_short_forecast(location: Location) -> dict[str, Any]:
         "next_24h_high_c": format_number(high),
         "forecast_time": f"{base_date[:4]}-{base_date[4:6]}-{base_date[6:8]}T{base_time[:2]}:{base_time[2:]}:00+09:00",
         "time_label": "발표 시각",
-        "timeline": sample_every_n_rows(upcoming_rows),
+        "timeline": sample_every_3_hours(upcoming_rows),
         "humidity": first_bucket.get("REH"),
         "wind_speed_ms": first_bucket.get("WSD"),
         "wind_direction_angle": format_number(coerce_float(first_bucket.get("VEC"))),

@@ -73,7 +73,7 @@ function renderProvider(provider) {
     return `
       <tr class="error-row">
         <td>${provider.provider}</td>
-        <td colspan="7">${provider.error}</td>
+        <td colspan="9">${provider.error}</td>
       </tr>
     `;
   }
@@ -83,26 +83,9 @@ function renderProvider(provider) {
       <td><a href="${provider.source_url}" target="_blank" rel="noreferrer">${provider.provider}</a></td>
       <td>${formatCell(provider.current_temp_c, "°C")}</td>
       <td>${formatCell(provider.feels_like_c, "°C")}</td>
-      <td>
-        ${formatCell(provider.condition)}
-        ${provider.humidity || provider.wind_speed_ms || provider.wind_direction || provider.wind_direction_angle || provider.precipitation_type || provider.precipitation_amount_mm || provider.snow_amount_cm ? `
-          <div class="provider-subline">
-            ${provider.humidity ? `습도 ${provider.humidity}%` : ""}
-            ${provider.humidity && (provider.wind_speed_ms || provider.wind_direction || provider.wind_direction_angle || provider.precipitation_type || provider.precipitation_amount_mm || provider.snow_amount_cm) ? " / " : ""}
-            ${provider.wind_speed_ms ? `풍속 ${provider.wind_speed_ms}m/s` : ""}
-            ${provider.wind_speed_ms && (provider.wind_direction || provider.wind_direction_angle || provider.precipitation_type || provider.precipitation_amount_mm || provider.snow_amount_cm) ? " / " : ""}
-            ${provider.wind_direction ? `풍향 ${provider.wind_direction}` : ""}
-            ${provider.wind_direction && (provider.wind_direction_angle || provider.precipitation_type || provider.precipitation_amount_mm || provider.snow_amount_cm) ? " / " : ""}
-            ${provider.wind_direction_angle ? `풍향각 ${provider.wind_direction_angle}°` : ""}
-            ${provider.wind_direction_angle && (provider.precipitation_type || provider.precipitation_amount_mm || provider.snow_amount_cm) ? " / " : ""}
-            ${provider.precipitation_type ? `강수형태 ${provider.precipitation_type}` : ""}
-            ${provider.precipitation_type && (provider.precipitation_amount_mm || provider.snow_amount_cm) ? " / " : ""}
-            ${provider.precipitation_amount_mm ? `강수량 ${provider.precipitation_amount_mm}mm` : ""}
-            ${provider.precipitation_amount_mm && provider.snow_amount_cm ? " / " : ""}
-            ${provider.snow_amount_cm ? `적설 ${provider.snow_amount_cm}cm` : ""}
-          </div>
-        ` : ""}
-      </td>
+      <td>${formatCell(provider.condition)}</td>
+      <td>${formatCell(provider.wind_speed_ms, "m/s")}</td>
+      <td>${formatCell(provider.precipitation_amount_mm, "mm")}</td>
       <td>${formatCell(provider.next_6h_precip_probability, "%")}</td>
       <td>${formatCell(provider.next_24h_low_c, "°C")}</td>
       <td>${formatCell(provider.next_24h_high_c, "°C")}</td>
