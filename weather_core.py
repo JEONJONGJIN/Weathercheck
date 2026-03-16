@@ -486,7 +486,12 @@ def fetch_data_go_kr_payload(service_path: str, params: str, service_key: str) -
 def fetch_kma_apihub_payload(service_path: str, params: dict[str, Any], auth_key: str) -> dict[str, Any]:
     query = urllib.parse.urlencode(params)
     url = f"https://apihub.kma.go.kr/api/typ02/openApi{service_path}?{query}&authKey={urllib.parse.quote(auth_key, safe='')}"
-    return fetch_json(url)
+    try:
+        return fetch_json(url)
+    except ApiError as exc:
+        if str(exc).startswith("403"):
+            raise ApiError("API 허브 단기예보 활용신청/승인 또는 authKey 확인 필요") from exc
+        raise
 
 
 def group_kma_forecast_rows(items: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
