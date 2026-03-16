@@ -104,6 +104,26 @@ class HelpersTests(unittest.TestCase):
         self.assertEqual(len(filtered), 2)
         self.assertEqual(filtered[0]["time"], "2026-03-16T11:00")
 
+    def test_active_providers_for_app_includes_both_kma_sources(self) -> None:
+        original_data_key = os.environ.get("DATA_GO_KR_SERVICE_KEY")
+        original_apihub_key = os.environ.get("KMA_APIHUB_AUTH_KEY")
+        try:
+            os.environ["DATA_GO_KR_SERVICE_KEY"] = "data-key"
+            os.environ["KMA_APIHUB_AUTH_KEY"] = "hub-key"
+            providers = app.active_providers_for_app()
+            provider_names = [name for name, _ in providers]
+            self.assertIn("기상청 단기예보(data.go.kr)", provider_names)
+            self.assertIn("기상청 단기예보(API 허브)", provider_names)
+        finally:
+            if original_data_key is None:
+                os.environ.pop("DATA_GO_KR_SERVICE_KEY", None)
+            else:
+                os.environ["DATA_GO_KR_SERVICE_KEY"] = original_data_key
+            if original_apihub_key is None:
+                os.environ.pop("KMA_APIHUB_AUTH_KEY", None)
+            else:
+                os.environ["KMA_APIHUB_AUTH_KEY"] = original_apihub_key
+
 
 class ConsensusTests(unittest.TestCase):
     def test_build_consensus_aggregates_summary_and_timeline(self) -> None:

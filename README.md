@@ -31,6 +31,8 @@ Vercel 환경변수는 선택 사항입니다. 기본값이 코드에 들어 있
 - `WINDY_API_KEY`
 - `KMA_APIHUB_AUTH_KEY`
 
+`KMA_APIHUB_AUTH_KEY`가 있으면 `기상청 단기예보(API 허브)`가 기존 `기상청 단기예보(data.go.kr)`와 별도 provider로 함께 표시됩니다.
+
 ## Current MVP
 
 - 고정 주소만 표시

@@ -483,6 +483,12 @@ def fetch_data_go_kr_payload(service_path: str, params: str, service_key: str) -
     raise ApiError(str(last_error) if last_error else "data.go.kr request failed")
 
 
+def fetch_kma_apihub_payload(service_path: str, params: dict[str, Any], auth_key: str) -> dict[str, Any]:
+    query = urllib.parse.urlencode(params)
+    url = f"https://apihub.kma.go.kr/api/typ02/openApi{service_path}?{query}&authKey={urllib.parse.quote(auth_key, safe='')}"
+    return fetch_json(url)
+
+
 def group_kma_forecast_rows(items: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
     grouped: dict[str, dict[str, str]] = {}
     for item in items:
@@ -490,6 +496,56 @@ def group_kma_forecast_rows(items: list[dict[str, Any]]) -> dict[str, dict[str, 
         grouped.setdefault(forecast_time, {})
         grouped[forecast_time][item.get("category", "")] = str(item.get("fcstValue", ""))
     return grouped
+
+
+def build_kma_short_forecast_result(
+    grouped: dict[str, dict[str, str]],
+    provider_name: str,
+    source_url: str,
+    base_date: str,
+    base_time: str,
+) -> dict[str, Any]:
+    ordered_times = sorted(grouped.keys())
+    timeline_rows = []
+    for forecast_time in ordered_times[:24]:
+        bucket = grouped[forecast_time]
+        timeline_rows.append(
+            timeline_entry(
+                time_value=forecast_time,
+                temperature_c=coerce_float(bucket.get("TMP")),
+                precip_probability=coerce_float(bucket.get("POP")),
+                condition=kma_condition_text(bucket.get("SKY"), bucket.get("PTY")),
+            )
+        )
+
+    upcoming_rows = future_timeline_rows(timeline_rows)
+    if not upcoming_rows:
+        upcoming_rows = timeline_rows
+    first_bucket = grouped[upcoming_rows[0]["time"]] if upcoming_rows else grouped[ordered_times[0]]
+    low, high = summarize_temperature([coerce_float(row.get("temperature_c")) for row in upcoming_rows])
+
+    return {
+        "provider": provider_name,
+        "source_url": source_url,
+        "current_temp_c": format_number(coerce_float(first_bucket.get("TMP"))),
+        "feels_like_c": None,
+        "condition": kma_condition_text(first_bucket.get("SKY"), first_bucket.get("PTY")),
+        "next_6h_precip_probability": format_number(
+            summarize_window([coerce_float(row.get("precip_probability")) for row in upcoming_rows[:6]])
+        ),
+        "next_24h_low_c": format_number(low),
+        "next_24h_high_c": format_number(high),
+        "forecast_time": f"{base_date[:4]}-{base_date[4:6]}-{base_date[6:8]}T{base_time[:2]}:{base_time[2:]}:00+09:00",
+        "time_label": "발표 시각",
+        "timeline": sample_every_3_hours(upcoming_rows),
+        "humidity": first_bucket.get("REH"),
+        "wind_speed_ms": first_bucket.get("WSD"),
+        "wind_direction_angle": format_number(coerce_float(first_bucket.get("VEC"))),
+        "wind_direction": wind_direction_text(first_bucket.get("VEC")),
+        "precipitation_type": kma_pty_text(first_bucket.get("PTY")),
+        "precipitation_amount_mm": None if first_bucket.get("PCP") in (None, "", "강수없음") else first_bucket.get("PCP"),
+        "snow_amount_cm": None if first_bucket.get("SNO") in (None, "", "적설없음") else first_bucket.get("SNO"),
+    }
 
 
 def open_meteo_forecast(location: Location) -> dict[str, Any]:
@@ -737,6 +793,87 @@ def kma_short_forecast(location: Location) -> dict[str, Any]:
     }
 
 
+def kma_short_forecast_data_go(location: Location) -> dict[str, Any]:
+    payload = kma_short_forecast(location)
+    payload["provider"] = "기상청 단기예보(data.go.kr)"
+    payload["time_label"] = "발표 시각"
+    return payload
+
+
+def kma_apihub_short_forecast(location: Location) -> dict[str, Any]:
+    auth_key = kma_apihub_auth_key()
+    if not auth_key:
+        raise ApiError("KMA_APIHUB_AUTH_KEY is not configured")
+
+    nx, ny = kma_grid_from_lat_lon(location.latitude, location.longitude)
+    base_date, base_time = latest_kma_base_datetime()
+    payload = fetch_kma_apihub_payload(
+        "/VilageFcstInfoService_2.0/getVilageFcst",
+        {
+            "pageNo": 1,
+            "numOfRows": 1000,
+            "dataType": "JSON",
+            "base_date": base_date,
+            "base_time": base_time,
+            "nx": nx,
+            "ny": ny,
+        },
+        auth_key,
+    )
+
+    response = payload.get("response", {})
+    header = response.get("header", {})
+    if header.get("resultCode") not in (None, "00"):
+        raise ApiError(f"{header.get('resultCode')} {header.get('resultMsg')}")
+
+    items = response.get("body", {}).get("items", {}).get("item", [])
+    if not items:
+        raise ApiError("KMA API Hub short forecast returned no items")
+
+    grouped = group_kma_forecast_rows(items)
+    ordered_times = sorted(grouped.keys())
+    timeline_rows = []
+    for forecast_time in ordered_times[:24]:
+        bucket = grouped[forecast_time]
+        timeline_rows.append(
+            timeline_entry(
+                time_value=forecast_time,
+                temperature_c=coerce_float(bucket.get("TMP")),
+                precip_probability=coerce_float(bucket.get("POP")),
+                condition=kma_condition_text(bucket.get("SKY"), bucket.get("PTY")),
+            )
+        )
+
+    upcoming_rows = future_timeline_rows(timeline_rows)
+    if not upcoming_rows:
+        upcoming_rows = timeline_rows
+    first_bucket = grouped[upcoming_rows[0]["time"]] if upcoming_rows else grouped[ordered_times[0]]
+    low, high = summarize_temperature([coerce_float(row.get("temperature_c")) for row in upcoming_rows])
+
+    return {
+        "provider": "기상청 단기예보(API 허브)",
+        "source_url": "https://apihub.kma.go.kr/apiList.do?seqApi=10",
+        "current_temp_c": format_number(coerce_float(first_bucket.get("TMP"))),
+        "feels_like_c": None,
+        "condition": kma_condition_text(first_bucket.get("SKY"), first_bucket.get("PTY")),
+        "next_6h_precip_probability": format_number(
+            summarize_window([coerce_float(row.get("precip_probability")) for row in upcoming_rows[:6]])
+        ),
+        "next_24h_low_c": format_number(low),
+        "next_24h_high_c": format_number(high),
+        "forecast_time": f"{base_date[:4]}-{base_date[4:6]}-{base_date[6:8]}T{base_time[:2]}:{base_time[2:]}:00+09:00",
+        "time_label": "발표 시각",
+        "timeline": sample_every_3_hours(upcoming_rows),
+        "humidity": first_bucket.get("REH"),
+        "wind_speed_ms": first_bucket.get("WSD"),
+        "wind_direction_angle": format_number(coerce_float(first_bucket.get("VEC"))),
+        "wind_direction": wind_direction_text(first_bucket.get("VEC")),
+        "precipitation_type": kma_pty_text(first_bucket.get("PTY")),
+        "precipitation_amount_mm": None if first_bucket.get("PCP") in (None, "", "강수없음") else first_bucket.get("PCP"),
+        "snow_amount_cm": None if first_bucket.get("SNO") in (None, "", "적설없음") else first_bucket.get("SNO"),
+    }
+
+
 def kma_mid_forecast() -> dict[str, Any]:
     service_key = data_go_kr_service_key()
     if not service_key:
@@ -916,6 +1053,19 @@ def active_providers() -> list[tuple[str, Any]]:
     return providers
 
 
+def active_providers_for_app() -> list[tuple[str, Any]]:
+    providers = []
+    if windy_api_key():
+        providers.append(("Windy", windy_forecast))
+    else:
+        providers.append(("Open-Meteo", open_meteo_forecast))
+    if data_go_kr_service_key():
+        providers.append(("기상청 단기예보(data.go.kr)", kma_short_forecast_data_go))
+    if kma_apihub_auth_key():
+        providers.append(("기상청 단기예보(API 허브)", kma_apihub_short_forecast))
+    return providers
+
+
 def build_consensus(providers: list[dict[str, Any]]) -> dict[str, Any]:
     successful = [provider for provider in providers if not provider.get("error")]
     current_spread = numeric_spread([coerce_float(provider.get("current_temp_c")) for provider in successful])
@@ -959,7 +1109,7 @@ def build_consensus(providers: list[dict[str, Any]]) -> dict[str, Any]:
 def collect_fixed_location_forecasts() -> dict[str, Any]:
     location = configured_location()
     providers = []
-    for provider_name, provider in active_providers():
+    for provider_name, provider in active_providers_for_app():
         try:
             providers.append(provider(location))
         except Exception as exc:
