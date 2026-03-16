@@ -462,15 +462,31 @@ def kma_bulletin_forecast(location: Location) -> dict[str, Any]:
     if not service_key:
         raise ApiError("DATA_GO_KR_SERVICE_KEY is not configured")
 
-    query = (
-        f"serviceKey={service_key}"
+    base_params = (
         f"&pageNo=1"
         f"&numOfRows=10"
         f"&dataType=JSON"
         f"&stnId={urllib.parse.quote(str(KMA_BULLETIN_STN_ID), safe='')}"
     )
-    raw = fetch_text(f"https://apis.data.go.kr/1360000/VilageFcstMsgService/getWthrSituation?{query}")
-    payload = json.loads(raw)
+    candidate_urls = [
+        f"http://apis.data.go.kr/1360000/VilageFcstMsgService/getWthrSituation?serviceKey={service_key}{base_params}",
+        f"https://apis.data.go.kr/1360000/VilageFcstMsgService/getWthrSituation?serviceKey={service_key}{base_params}",
+        f"http://apis.data.go.kr/1360000/VilageFcstMsgService/getWthrSituation?serviceKey={urllib.parse.quote(service_key, safe='')}{base_params}",
+        f"https://apis.data.go.kr/1360000/VilageFcstMsgService/getWthrSituation?serviceKey={urllib.parse.quote(service_key, safe='')}{base_params}",
+    ]
+
+    last_error: Exception | None = None
+    payload = None
+    for url in candidate_urls:
+        try:
+            raw = fetch_text(url)
+            payload = json.loads(raw)
+            break
+        except Exception as exc:
+            last_error = exc
+
+    if payload is None:
+        raise ApiError(str(last_error) if last_error else "KMA bulletin request failed")
     body = payload.get("response", {}).get("body", {})
     items = body.get("items", {}).get("item", [])
     if not items:
