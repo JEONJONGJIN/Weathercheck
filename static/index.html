@@ -3,18 +3,14 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>WeatherCheck</title>
+    <title>한솔스테이 날씨 조회</title>
     <link rel="stylesheet" href="/static/styles.css">
   </head>
   <body>
     <main class="shell">
       <section class="hero">
-        <p class="eyebrow">WEATHERCHECK</p>
-        <h1>한 주소, 여러 예보.</h1>
-        <p class="lede">
-          고정한 주소 하나를 기준으로 여러 무료 날씨 API를 모아서 현재 기온, 강수 가능성,
-          그리고 시간대별 차이를 한 화면에서 봅니다.
-        </p>
+        <p class="eyebrow">HANSOL STAY</p>
+        <h1>한솔스테이 날씨 조회</h1>
       </section>
 
       <section class="panel">
@@ -22,11 +18,10 @@
         <div class="fixed-address-row">
           <div class="fixed-address-card">
             <strong>경기 연천군 장남면 장백로278번길 4</strong>
-            <span>입력 없이 이 위치만 조회합니다.</span>
           </div>
           <button id="refresh-button" type="button">지금 조회</button>
         </div>
-        <div id="status" class="status">고정 주소의 무료 API 예보를 조회할 준비가 되어 있습니다.</div>
+        <div id="status" class="status">조회 버튼을 누르면 날씨 API 비교를 시작합니다.</div>
       </section>
 
       <section id="result" class="result hidden">
@@ -57,7 +52,7 @@
             <p id="metric-current-spread" class="metric-value"></p>
           </article>
           <article class="metric-card">
-            <p class="metric-label">6시간 강수 편차</p>
+            <p class="metric-label">6시간 강수 확률 편차</p>
             <p id="metric-precip-spread" class="metric-value"></p>
           </article>
         </section>
@@ -113,4 +108,4 @@
 
     <script src="/static/app.js"></script>
   </body>
-  </html>
+</html>
