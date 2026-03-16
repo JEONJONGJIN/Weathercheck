@@ -7,7 +7,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 
@@ -17,7 +17,7 @@ FIXED_LOCATION_LABEL = "경기 연천군 장남면 장백로278번길 4"
 DEFAULT_CONTACT = "jin0424@hanmail.net"
 DEFAULT_LATITUDE = 37.9851297299633
 DEFAULT_LONGITUDE = 126.886246142811
-KMA_BULLETIN_STN_ID = os.getenv("KMA_BULLETIN_STN_ID", "109")
+KST = timezone(timedelta(hours=9))
 
 
 def default_user_agent() -> str:
@@ -284,31 +284,84 @@ def sample_every_n_rows(rows: list[dict[str, Any]], target_count: int = TIMELINE
     return rows[::step][:target_count]
 
 
-def summarize_korean_bulletin(value: str | None, limit: int = 36) -> str | None:
-    if not value:
-        return None
-    normalized = " ".join(value.split())
-    for separator in [".", "다.", "\n"]:
-        if separator in normalized:
-            candidate = normalized.split(separator)[0].strip()
-            if candidate:
-                normalized = candidate
-                break
-    if len(normalized) <= limit:
-        return normalized
-    return normalized[: limit - 1].rstrip() + "…"
+def kma_grid_from_lat_lon(latitude: float, longitude: float) -> tuple[int, int]:
+    re_value = 6371.00877 / 5.0
+    grid = math.pi / 180.0
+    slat1 = 30.0 * grid
+    slat2 = 60.0 * grid
+    olon = 126.0 * grid
+    olat = 38.0 * grid
+    xo = 43.0
+    yo = 136.0
+
+    sn = math.tan(math.pi * 0.25 + slat2 * 0.5) / math.tan(math.pi * 0.25 + slat1 * 0.5)
+    sn = math.log(math.cos(slat1) / math.cos(slat2)) / math.log(sn)
+    sf = math.tan(math.pi * 0.25 + slat1 * 0.5)
+    sf = math.pow(sf, sn) * math.cos(slat1) / sn
+    ro = math.tan(math.pi * 0.25 + olat * 0.5)
+    ro = re_value * sf / math.pow(ro, sn)
+    ra = math.tan(math.pi * 0.25 + latitude * grid * 0.5)
+    ra = re_value * sf / math.pow(ra, sn)
+    theta = longitude * grid - olon
+    if theta > math.pi:
+        theta -= 2.0 * math.pi
+    if theta < -math.pi:
+        theta += 2.0 * math.pi
+    theta *= sn
+    x = int(math.floor(ra * math.sin(theta) + xo + 0.5))
+    y = int(math.floor(ro - ra * math.cos(theta) + yo + 0.5))
+    return x, y
 
 
-def first_sentence(value: str | None) -> str | None:
-    if not value:
-        return None
-    normalized = " ".join(value.split())
-    for separator in [". ", "다. ", "\n"]:
-        if separator in normalized:
-            candidate = normalized.split(separator)[0].strip()
-            if candidate:
-                return candidate
-    return normalized
+def latest_kma_base_datetime(now: datetime | None = None) -> tuple[str, str]:
+    current = now.astimezone(KST) if now else datetime.now(KST)
+    issue_hours = [23, 20, 17, 14, 11, 8, 5, 2]
+    for hour in issue_hours:
+        candidate = current.replace(hour=hour, minute=0, second=0, microsecond=0)
+        if current >= candidate + timedelta(minutes=10):
+            return candidate.strftime("%Y%m%d"), candidate.strftime("%H%M")
+
+    previous_day = (current - timedelta(days=1)).replace(hour=23, minute=0, second=0, microsecond=0)
+    return previous_day.strftime("%Y%m%d"), previous_day.strftime("%H%M")
+
+
+def kma_sky_text(code: str | None) -> str | None:
+    mapping = {
+        "1": "맑음",
+        "3": "구름 많음",
+        "4": "흐림",
+    }
+    return mapping.get(str(code)) if code is not None else None
+
+
+def kma_pty_text(code: str | None) -> str | None:
+    mapping = {
+        "0": None,
+        "1": "비",
+        "2": "비/눈",
+        "3": "눈",
+        "4": "소나기",
+        "5": "빗방울",
+        "6": "빗방울/눈날림",
+        "7": "눈날림",
+    }
+    return mapping.get(str(code)) if code is not None else None
+
+
+def kma_condition_text(sky: str | None, pty: str | None) -> str | None:
+    precipitation = kma_pty_text(pty)
+    if precipitation:
+        return precipitation
+    return kma_sky_text(sky)
+
+
+def group_kma_forecast_rows(items: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
+    grouped: dict[str, dict[str, str]] = {}
+    for item in items:
+        forecast_time = f"{item.get('fcstDate', '')}T{str(item.get('fcstTime', '')).zfill(4)[:2]}:{str(item.get('fcstTime', '')).zfill(4)[2:]}:00"
+        grouped.setdefault(forecast_time, {})
+        grouped[forecast_time][item.get("category", "")] = str(item.get("fcstValue", ""))
+    return grouped
 
 
 def open_meteo_forecast(location: Location) -> dict[str, Any]:
@@ -469,22 +522,27 @@ def wttr_forecast(location: Location) -> dict[str, Any]:
     }
 
 
-def kma_bulletin_forecast(location: Location) -> dict[str, Any]:
+def kma_short_forecast(location: Location) -> dict[str, Any]:
     service_key = data_go_kr_service_key()
     if not service_key:
         raise ApiError("DATA_GO_KR_SERVICE_KEY is not configured")
 
+    nx, ny = kma_grid_from_lat_lon(location.latitude, location.longitude)
+    base_date, base_time = latest_kma_base_datetime()
     base_params = (
         f"&pageNo=1"
-        f"&numOfRows=10"
+        f"&numOfRows=1000"
         f"&dataType=JSON"
-        f"&stnId={urllib.parse.quote(str(KMA_BULLETIN_STN_ID), safe='')}"
+        f"&base_date={base_date}"
+        f"&base_time={base_time}"
+        f"&nx={nx}"
+        f"&ny={ny}"
     )
     candidate_urls = [
-        f"http://apis.data.go.kr/1360000/VilageFcstMsgService/getWthrSituation?serviceKey={service_key}{base_params}",
-        f"https://apis.data.go.kr/1360000/VilageFcstMsgService/getWthrSituation?serviceKey={service_key}{base_params}",
-        f"http://apis.data.go.kr/1360000/VilageFcstMsgService/getWthrSituation?serviceKey={urllib.parse.quote(service_key, safe='')}{base_params}",
-        f"https://apis.data.go.kr/1360000/VilageFcstMsgService/getWthrSituation?serviceKey={urllib.parse.quote(service_key, safe='')}{base_params}",
+        f"http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey={service_key}{base_params}",
+        f"https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey={service_key}{base_params}",
+        f"http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey={urllib.parse.quote(service_key, safe='')}{base_params}",
+        f"https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey={urllib.parse.quote(service_key, safe='')}{base_params}",
     ]
 
     last_error: Exception | None = None
@@ -498,33 +556,52 @@ def kma_bulletin_forecast(location: Location) -> dict[str, Any]:
             last_error = exc
 
     if payload is None:
-        raise ApiError(str(last_error) if last_error else "KMA bulletin request failed")
+        raise ApiError(str(last_error) if last_error else "KMA short forecast request failed")
+
+    header = payload.get("response", {}).get("header", {})
+    if header.get("resultCode") not in (None, "00"):
+        raise ApiError(f"{header.get('resultCode')} {header.get('resultMsg')}")
+
     body = payload.get("response", {}).get("body", {})
     items = body.get("items", {}).get("item", [])
     if not items:
-        raise ApiError("KMA bulletin returned no items")
+        raise ApiError("KMA short forecast returned no items")
 
-    entry = items[0]
-    overview = entry.get("wfSv1") or ""
-    notice = entry.get("wn") or ""
-    reserve_notice = entry.get("wr") or ""
-    summary = first_sentence(overview) or first_sentence(notice) or "기상 통보문"
+    grouped = group_kma_forecast_rows(items)
+    ordered_times = sorted(grouped.keys())
+    timeline_rows = []
+    for forecast_time in ordered_times[:24]:
+        bucket = grouped[forecast_time]
+        timeline_rows.append(
+            timeline_entry(
+                time_value=forecast_time,
+                temperature_c=coerce_float(bucket.get("TMP")),
+                precip_probability=coerce_float(bucket.get("POP")),
+                condition=kma_condition_text(bucket.get("SKY"), bucket.get("PTY")),
+            )
+        )
+
+    first_bucket = grouped[ordered_times[0]]
+    min_candidates = [coerce_float(item.get("fcstValue")) for item in items if item.get("category") == "TMN"]
+    max_candidates = [coerce_float(item.get("fcstValue")) for item in items if item.get("category") == "TMX"]
+    min_candidates = [value for value in min_candidates if value is not None]
+    max_candidates = [value for value in max_candidates if value is not None]
 
     return {
-        "provider": "기상청 통보문",
-        "source_url": "https://www.data.go.kr/data/15058629/openapi.do",
-        "current_temp_c": None,
+        "provider": "기상청 단기예보",
+        "source_url": "https://www.data.go.kr/data/15084084/openapi.do",
+        "current_temp_c": format_number(coerce_float(first_bucket.get("TMP"))),
         "feels_like_c": None,
-        "condition": summary,
-        "next_6h_precip_probability": None,
-        "next_24h_low_c": None,
-        "next_24h_high_c": None,
-        "forecast_time": entry.get("tmFc"),
-        "timeline": [],
-        "bulletin_summary": summary,
-        "bulletin_overview": overview or None,
-        "bulletin_notice": notice or None,
-        "bulletin_preliminary_notice": reserve_notice or None,
+        "condition": kma_condition_text(first_bucket.get("SKY"), first_bucket.get("PTY")),
+        "next_6h_precip_probability": format_number(
+            summarize_window([coerce_float(grouped[key].get("POP")) for key in ordered_times[:6]])
+        ),
+        "next_24h_low_c": format_number(min(min_candidates)) if min_candidates else None,
+        "next_24h_high_c": format_number(max(max_candidates)) if max_candidates else None,
+        "forecast_time": f"{base_date}T{base_time[:2]}:{base_time[2:]}:00+09:00",
+        "timeline": sample_every_n_rows(timeline_rows),
+        "humidity": first_bucket.get("REH"),
+        "wind_speed_ms": first_bucket.get("WSD"),
     }
 
 
@@ -535,7 +612,7 @@ def active_providers() -> list[tuple[str, Any]]:
         ("wttr.in", wttr_forecast),
     ]
     if data_go_kr_service_key():
-        providers.append(("기상청 통보문", kma_bulletin_forecast))
+        providers.append(("기상청 단기예보", kma_short_forecast))
     return providers
 
 

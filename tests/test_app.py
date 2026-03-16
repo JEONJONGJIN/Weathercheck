@@ -64,13 +64,14 @@ class HelpersTests(unittest.TestCase):
         self.assertEqual(app.translate_met_symbol("partlycloudy_day"), "구름 조금")
         self.assertEqual(app.translate_met_symbol("rainshowers_day"), "소나기")
 
-    def test_summarize_korean_bulletin_truncates_cleanly(self) -> None:
-        text = "오늘은 대체로 흐리겠고 늦은 오후부터 비가 내리겠습니다. 내일은 맑겠습니다."
-        self.assertEqual(app.summarize_korean_bulletin(text, limit=20), "오늘은 대체로 흐리겠고 늦은 오후부…")
+    def test_kma_grid_from_lat_lon_returns_integer_grid(self) -> None:
+        nx, ny = app.kma_grid_from_lat_lon(37.9851297299633, 126.886246142811)
+        self.assertIsInstance(nx, int)
+        self.assertIsInstance(ny, int)
 
-    def test_first_sentence_extracts_without_truncation(self) -> None:
-        text = "오늘은 대체로 흐리겠고 늦은 오후부터 비가 내리겠습니다. 내일은 맑겠습니다."
-        self.assertEqual(app.first_sentence(text), "오늘은 대체로 흐리겠고 늦은 오후부터 비가 내리겠습니다")
+    def test_kma_condition_text_prefers_precipitation(self) -> None:
+        self.assertEqual(app.kma_condition_text("1", "0"), "맑음")
+        self.assertEqual(app.kma_condition_text("4", "1"), "비")
 
 
 class ConsensusTests(unittest.TestCase):
