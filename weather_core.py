@@ -1202,10 +1202,7 @@ def active_providers() -> list[tuple[str, Any]]:
 
 def active_providers_for_app() -> list[tuple[str, Any]]:
     providers = []
-    if windy_api_key():
-        providers.append(("Windy", windy_forecast))
-    else:
-        providers.append(("Open-Meteo", open_meteo_forecast))
+    providers.append(("Open-Meteo", open_meteo_forecast))
     if openweather_api_key():
         providers.append(("OpenWeather", openweather_forecast))
     if data_go_kr_service_key():

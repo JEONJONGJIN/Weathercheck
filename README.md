@@ -29,8 +29,8 @@
 
 ## 현재 지원 소스
 
-- `Windy`
-  - `WINDY_API_KEY`가 있을 때 활성화
+- `Open-Meteo`
+  - 기본 비교 소스
 - `OpenWeather`
   - `OPENWEATHER_API_KEY`가 있을 때 활성화
 - `기상청 단기예보(data.go.kr)`
@@ -47,7 +47,6 @@
 - `WEATHERCHECK_CONTACT`
 - `WEATHERCHECK_LATITUDE`
 - `WEATHERCHECK_LONGITUDE`
-- `WINDY_API_KEY`
 - `OPENWEATHER_API_KEY`
 - `DATA_GO_KR_SERVICE_KEY`
 - `KMA_APIHUB_AUTH_KEY`
@@ -66,7 +65,6 @@ python .\app.py
 
 ```powershell
 $env:WEATHERCHECK_CONTACT="your-email@example.com"
-$env:WINDY_API_KEY="your-windy-key"
 $env:OPENWEATHER_API_KEY="your-openweather-key"
 $env:DATA_GO_KR_SERVICE_KEY="your-data-go-kr-key"
 $env:KMA_APIHUB_AUTH_KEY="your-kma-apihub-key"
@@ -81,7 +79,6 @@ python .\app.py
 
 주요 확인 항목:
 
-- `WINDY_API_KEY`가 있으면 `Windy` provider 표시
 - `OPENWEATHER_API_KEY`가 있으면 `OpenWeather` provider 표시
 - `DATA_GO_KR_SERVICE_KEY`가 있으면 `기상청 단기예보(data.go.kr)`와 `기상청 중기예보` 표시
 - `KMA_APIHUB_AUTH_KEY`가 있으면 `기상청 단기예보(API 허브)` 표시
