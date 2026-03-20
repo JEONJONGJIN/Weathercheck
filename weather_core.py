@@ -833,6 +833,57 @@ def accuweather_forecast(location: Location) -> dict[str, Any]:
     }
 
 
+def accuweather_daily_forecast(location: Location) -> dict[str, Any]:
+    api_key = accuweather_api_key()
+    if not api_key:
+        raise ApiError("ACCUWEATHER_API_KEY is not configured")
+
+    geoposition_query = urllib.parse.urlencode(
+        {
+            "apikey": api_key,
+            "q": f"{location.latitude},{location.longitude}",
+            "language": "ko-kr",
+            "details": "false",
+            "toplevel": "true",
+        }
+    )
+    geo = fetch_json(
+        f"https://dataservice.accuweather.com/locations/v1/cities/geoposition/search?{geoposition_query}"
+    )
+    location_key = geo.get("Key")
+    if not location_key:
+        raise ApiError("AccuWeather daily forecast location key lookup failed")
+
+    forecast = fetch_json(
+        f"https://dataservice.accuweather.com/forecasts/v1/daily/5day/{location_key}?apikey={urllib.parse.quote(api_key)}&language=ko-kr&details=true&metric=true"
+    )
+    items = forecast.get("DailyForecasts", [])
+    if not items:
+        raise ApiError("AccuWeather daily forecast returned no items")
+
+    days = []
+    for entry in items:
+        day_part = entry.get("Day", {})
+        night_part = entry.get("Night", {})
+        days.append(
+            {
+                "target_date": entry.get("Date", "")[:10],
+                "am_condition": translate_condition_text(day_part.get("ShortPhrase") or day_part.get("IconPhrase")),
+                "pm_condition": translate_condition_text(night_part.get("ShortPhrase") or night_part.get("IconPhrase")),
+                "low_c": format_number(coerce_float(entry.get("Temperature", {}).get("Minimum", {}).get("Value"))),
+                "high_c": format_number(coerce_float(entry.get("Temperature", {}).get("Maximum", {}).get("Value"))),
+            }
+        )
+
+    return {
+        "provider": "AccuWeather 중기예보",
+        "source_url": "https://developer.accuweather.com/",
+        "forecast_time": forecast.get("Headline", {}).get("EffectiveDate"),
+        "time_label": "기준 시각",
+        "days": days,
+    }
+
+
 def met_norway_forecast(location: Location) -> dict[str, Any]:
     query = urllib.parse.urlencode({"lat": location.latitude, "lon": location.longitude})
     payload = fetch_json(
@@ -1366,6 +1417,11 @@ def collect_fixed_location_forecasts() -> dict[str, Any]:
         "mid_forecast": (
             kma_mid_forecast()
             if data_go_kr_service_key()
+            else None
+        ),
+        "accuweather_daily_forecast": (
+            accuweather_daily_forecast(location)
+            if accuweather_api_key()
             else None
         ),
         "consensus": build_consensus(providers),

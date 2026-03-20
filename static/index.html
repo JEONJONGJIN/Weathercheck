@@ -93,15 +93,28 @@
           </div>
         </section>
 
-        <section id="mid-forecast-panel" class="mid-forecast-panel hidden">
-          <div class="section-head">
-            <div>
-              <p class="muted">기상청 중기예보</p>
-              <h3>3일에서 10일 전망</h3>
+        <section class="mid-forecast-layout">
+          <section id="mid-forecast-panel" class="mid-forecast-panel hidden">
+            <div class="section-head">
+              <div>
+                <p class="muted">기상청 중기예보</p>
+                <h3>3일에서 10일 전망</h3>
+              </div>
+              <p id="mid-forecast-time" class="section-note"></p>
             </div>
-            <p id="mid-forecast-time" class="section-note"></p>
-          </div>
-          <div id="mid-forecast-grid" class="mid-forecast-grid"></div>
+            <div id="mid-forecast-grid" class="mid-forecast-grid"></div>
+          </section>
+
+          <section id="accu-mid-forecast-panel" class="mid-forecast-panel hidden">
+            <div class="section-head">
+              <div>
+                <p class="muted">AccuWeather 중기예보</p>
+                <h3>5일 전망</h3>
+              </div>
+              <p id="accu-mid-forecast-time" class="section-note"></p>
+            </div>
+            <div id="accu-mid-forecast-grid" class="mid-forecast-grid"></div>
+          </section>
         </section>
       </section>
     </main>

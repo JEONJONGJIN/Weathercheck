@@ -13,6 +13,9 @@ const timelineBody = document.querySelector("#timeline-body");
 const midForecastPanel = document.querySelector("#mid-forecast-panel");
 const midForecastTime = document.querySelector("#mid-forecast-time");
 const midForecastGrid = document.querySelector("#mid-forecast-grid");
+const accuMidForecastPanel = document.querySelector("#accu-mid-forecast-panel");
+const accuMidForecastTime = document.querySelector("#accu-mid-forecast-time");
+const accuMidForecastGrid = document.querySelector("#accu-mid-forecast-grid");
 
 function formatCell(value, suffix = "") {
   if (value === null || value === undefined || value === "") {
@@ -82,7 +85,6 @@ function renderProvider(provider) {
     <tr>
       <td>
         <a href="${provider.source_url}" target="_blank" rel="noreferrer">${provider.provider}</a>
-        ${provider.prototype_note ? `<span class="provider-badge">${provider.prototype_note}</span>` : ""}
       </td>
       <td>${formatCell(provider.current_temp_c, "°C")}</td>
       <td>${formatCell(provider.feels_like_c, "°C")}</td>
@@ -97,16 +99,16 @@ function renderProvider(provider) {
   `;
 }
 
-function renderMidForecast(midForecast) {
-  if (!midForecast || !midForecast.days || !midForecast.days.length) {
-    midForecastPanel.classList.add("hidden");
-    midForecastGrid.innerHTML = "";
-    midForecastTime.textContent = "";
+function renderForecastCards(targetPanel, targetTime, targetGrid, forecast, fallbackLabel) {
+  if (!forecast || !forecast.days || !forecast.days.length) {
+    targetPanel.classList.add("hidden");
+    targetGrid.innerHTML = "";
+    targetTime.textContent = "";
     return;
   }
 
-  midForecastTime.textContent = `${midForecast.time_label || "발표 시각"} ${formatDateTime(midForecast.forecast_time)}`;
-  midForecastGrid.innerHTML = midForecast.days
+  targetTime.textContent = `${forecast.time_label || fallbackLabel} ${formatDateTime(forecast.forecast_time)}`;
+  targetGrid.innerHTML = forecast.days
     .map((day) => `
       <article class="mid-card">
         <p class="mid-day">${formatMonthDay(day.target_date)}</p>
@@ -116,7 +118,7 @@ function renderMidForecast(midForecast) {
       </article>
     `)
     .join("");
-  midForecastPanel.classList.remove("hidden");
+  targetPanel.classList.remove("hidden");
 }
 
 function renderTimelineHeader(consensus) {
@@ -224,7 +226,8 @@ async function loadForecast() {
     longitude.textContent = payload.location.longitude.toFixed(4);
     tableBody.innerHTML = payload.providers.map(renderProvider).join("");
     renderMetrics(payload.consensus);
-    renderMidForecast(payload.mid_forecast);
+    renderForecastCards(midForecastPanel, midForecastTime, midForecastGrid, payload.mid_forecast, "발표 시각");
+    renderForecastCards(accuMidForecastPanel, accuMidForecastTime, accuMidForecastGrid, payload.accuweather_daily_forecast, "기준 시각");
     renderTimelineHeader(payload.consensus);
     renderTimelineRows(payload.providers, payload.consensus);
     resultSection.classList.remove("hidden");
