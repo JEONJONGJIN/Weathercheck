@@ -143,6 +143,19 @@ class HelpersTests(unittest.TestCase):
             else:
                 os.environ["OPENWEATHER_API_KEY"] = original_key
 
+    def test_active_providers_for_app_includes_accuweather(self) -> None:
+        original_key = os.environ.get("ACCUWEATHER_API_KEY")
+        try:
+            os.environ["ACCUWEATHER_API_KEY"] = "accu-key"
+            providers = app.active_providers_for_app()
+            provider_names = [name for name, _ in providers]
+            self.assertIn("AccuWeather", provider_names)
+        finally:
+            if original_key is None:
+                os.environ.pop("ACCUWEATHER_API_KEY", None)
+            else:
+                os.environ["ACCUWEATHER_API_KEY"] = original_key
+
 class ConsensusTests(unittest.TestCase):
     def test_build_consensus_aggregates_summary_and_timeline(self) -> None:
         providers = [

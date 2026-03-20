@@ -138,6 +138,10 @@ def openweather_api_key() -> str | None:
     return os.getenv("OPENWEATHER_API_KEY")
 
 
+def accuweather_api_key() -> str | None:
+    return os.getenv("ACCUWEATHER_API_KEY")
+
+
 def kma_apihub_auth_key() -> str | None:
     return os.getenv("KMA_APIHUB_AUTH_KEY")
 
@@ -741,6 +745,94 @@ def openweather_forecast(location: Location) -> dict[str, Any]:
     }
 
 
+def accuweather_forecast(location: Location) -> dict[str, Any]:
+    api_key = accuweather_api_key()
+    if not api_key:
+        raise ApiError("ACCUWEATHER_API_KEY is not configured")
+
+    geoposition_query = urllib.parse.urlencode(
+        {
+            "apikey": api_key,
+            "q": f"{location.latitude},{location.longitude}",
+            "language": "ko-kr",
+            "details": "false",
+            "toplevel": "true",
+        }
+    )
+    try:
+        geo = fetch_json(
+            f"https://dataservice.accuweather.com/locations/v1/cities/geoposition/search?{geoposition_query}"
+        )
+    except ApiError as exc:
+        if str(exc).startswith("401"):
+            raise ApiError("AccuWeather API key가 유효하지 않거나 비활성 상태입니다") from exc
+        raise
+
+    location_key = geo.get("Key")
+    if not location_key:
+        raise ApiError("AccuWeather location key lookup failed")
+
+    common_query = urllib.parse.urlencode(
+        {
+            "apikey": api_key,
+            "language": "ko-kr",
+            "details": "true",
+        }
+    )
+    current = fetch_json(
+        f"https://dataservice.accuweather.com/currentconditions/v1/{location_key}?{common_query}"
+    )
+    forecast = fetch_json(
+        f"https://dataservice.accuweather.com/forecasts/v1/hourly/12hour/{location_key}?{common_query}&metric=true"
+    )
+
+    current_item = current[0] if current else {}
+    forecast_items = forecast[:12] if forecast else []
+
+    timeline_rows = []
+    for entry in forecast_items:
+        condition = translate_condition_text(entry.get("IconPhrase"))
+        precip_probability = coerce_float(entry.get("PrecipitationProbability"))
+        timeline_rows.append(
+            timeline_entry(
+                time_value=entry.get("DateTime"),
+                temperature_c=coerce_float(entry.get("Temperature", {}).get("Value")),
+                precip_probability=precip_probability,
+                condition=condition,
+            )
+        )
+
+    upcoming_rows = future_timeline_rows(timeline_rows)
+    if not upcoming_rows:
+        upcoming_rows = timeline_rows
+    low, high = summarize_temperature([coerce_float(row.get("temperature_c")) for row in upcoming_rows])
+    next_precip_amount = None
+    if forecast_items:
+        next_precip_amount = coerce_float(
+            forecast_items[0].get("TotalLiquid", {}).get("Value")
+        )
+
+    return {
+        "provider": "AccuWeather",
+        "source_url": "https://developer.accuweather.com/",
+        "current_temp_c": format_number(coerce_float(current_item.get("Temperature", {}).get("Metric", {}).get("Value"))),
+        "feels_like_c": format_number(
+            coerce_float(current_item.get("RealFeelTemperature", {}).get("Metric", {}).get("Value"))
+        ),
+        "condition": translate_condition_text(current_item.get("WeatherText")),
+        "next_6h_precip_probability": format_number(
+            summarize_window([coerce_float(row.get("precip_probability")) for row in upcoming_rows[:6]])
+        ),
+        "next_24h_low_c": format_number(low),
+        "next_24h_high_c": format_number(high),
+        "forecast_time": current_item.get("LocalObservationDateTime"),
+        "time_label": "기준 시각",
+        "timeline": sample_every_3_hours(upcoming_rows),
+        "wind_speed_ms": format_number(coerce_float(current_item.get("Wind", {}).get("Speed", {}).get("Metric", {}).get("Value"))),
+        "precipitation_amount_mm": format_number(next_precip_amount),
+    }
+
+
 def met_norway_forecast(location: Location) -> dict[str, Any]:
     query = urllib.parse.urlencode({"lat": location.latitude, "lon": location.longitude})
     payload = fetch_json(
@@ -1205,6 +1297,8 @@ def active_providers_for_app() -> list[tuple[str, Any]]:
     providers.append(("Open-Meteo", open_meteo_forecast))
     if openweather_api_key():
         providers.append(("OpenWeather", openweather_forecast))
+    if accuweather_api_key():
+        providers.append(("AccuWeather", accuweather_forecast))
     if data_go_kr_service_key():
         providers.append(("기상청 단기예보(data.go.kr)", kma_short_forecast_data_go))
     if kma_apihub_auth_key():
